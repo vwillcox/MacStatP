@@ -1,0 +1,14 @@
+# Contains the Presto's previous WiFi password and Immich API key.
+# Never commit this.
+backup-presto-flash/
+
+# Pimoroni firmware images — large binaries, fetched on demand by
+# tools/recover.sh rather than vendored.
+firmware/
+
+# Scratch renders and captures; the committed screenshots live in docs/.
+build/
+
+__pycache__/
+*.pyc
+.DS_Store

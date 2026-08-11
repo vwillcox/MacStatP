@@ -1,0 +1,192 @@
+"""Mac status display for Pimoroni Presto.
+
+The Mac sends one small JSON object per frame (~600 bytes) over USB serial
+and the board draws the dashboard itself. Streaming rendered pixels instead
+was tried and abandoned: a frame only compresses well while the artwork is
+flat-shaded, and pushing tens of KB per frame through USB CDC stalled the
+link far more than local drawing costs.
+
+The board runs standalone — with no host connected it shows a standby card
+rather than a blank screen.
+"""
+
+import gc
+import time
+
+import machine
+
+# Overclock before anything else initialises: the RP2350 boots at 200 MHz
+# and 264 is the usual safe step for the Presto. Rendering is entirely
+# CPU-bound here, so this buys a proportional jump in frame rate.
+CLOCK_HZ = 264_000_000
+try:
+    machine.freq(CLOCK_HZ)
+except Exception as _e:      # fall back to the stock clock rather than fail
+    print("overclock rejected:", _e)
+
+from presto import Presto  # noqa: E402  (must follow the clock change)
+
+import dashboard
+import storage
+import theme
+from link import Link
+
+SAVE_EVERY = 30      # seconds between history writes to the SD card
+IDLE_LIMIT = 5       # seconds without data before the link reads as dead
+HOLD_MS = 700        # press longer than this is a hold, not a tap
+VIEW_TAG = "#V:"     # prefix the agent watches for on our stdout
+
+
+class Display:
+    """Routes PicoGraphics drawing through the panel's update()."""
+
+    def __init__(self, presto):
+        self._p = presto
+        self._g = presto.display
+
+    def __getattr__(self, name):
+        return getattr(self._g, name)
+
+    def update(self):
+        self._p.update()
+
+
+def cycle_brightness(level):
+    for step in (0.25, 0.55, 0.85, 1.0):
+        if level < step - 0.01:
+            return step
+    return 0.25
+
+
+def main():
+    print("Status display: starting")
+    presto = Presto(full_res=True)
+    d = Display(presto)
+    # Owning the framebuffer lets the board screenshot itself on request,
+    # which is how the layout gets verified without looking at the panel.
+    fb = bytearray(480 * 480 * 2)
+    d.set_framebuffer(fb)
+    pens = theme.Pens(d)
+
+    store = storage.Storage()
+    db = dashboard.Dashboard(d, pens)
+
+    db.splash("MAC STATUS", ["STARTING UP"])
+    d.update()
+
+    if store.available:
+        links = store.load_history()
+        db.seed(links)
+        store.log("boot: sd ok, history for %d links" % len(links))
+    else:
+        store.log("boot: no sd card")
+
+    brightness = float(store.config.get("brightness", 0.85))
+    try:
+        d.set_backlight(brightness)
+    except Exception:
+        pass
+
+    link = Link()
+    try:
+        touch = presto.touch
+    except Exception:
+        touch = None
+
+    data = None
+    detail = None
+    view = None          # None = dashboard, otherwise the open panel
+    last_rx = 0.0
+    last_save = time.time()
+    was_linked = None
+    touch_down = False
+    press_at = 0
+    press_xy = (0, 0)
+    frames = 0
+
+    while True:
+        incoming = link.read()
+        shot = False
+        if incoming:
+            if incoming.get("cmd") == "shot":
+                shot = True
+            else:
+                data = incoming
+                detail = incoming.get("det")
+                db.push(data)
+                last_rx = time.time()
+
+        linked = data is not None and (time.time() - last_rx) < IDLE_LIMIT
+
+        # Tap a panel to open its breakdown, tap again to close. Holding
+        # anywhere on the dashboard cycles the backlight instead.
+        if touch is not None:
+            try:
+                touch.poll()
+                pressed = bool(touch.state)
+                if pressed and not touch_down:
+                    press_at = time.ticks_ms()
+                    press_xy = (touch.x, touch.y)
+                elif touch_down and not pressed:
+                    held = time.ticks_diff(time.ticks_ms(), press_at)
+                    if view is not None:
+                        view = None
+                        print(VIEW_TAG + "none")
+                    elif held >= HOLD_MS:
+                        brightness = cycle_brightness(brightness)
+                        store.config["brightness"] = brightness
+                        store.save_config()
+                        try:
+                            d.set_backlight(brightness)
+                        except Exception:
+                            pass
+                    else:
+                        hit = db.hit_test(press_xy[0], press_xy[1])
+                        if hit:
+                            view = hit
+                            detail = None
+                            # Tell the agent which breakdown to collect;
+                            # it only gathers process lists on demand.
+                            print(VIEW_TAG + view)
+                touch_down = pressed
+            except Exception:
+                pass
+
+        if data is None:
+            db.splash("WAITING FOR MAC", ["RUN HOST/AGENT.PY",
+                                          "ON YOUR MAC"])
+        elif view is not None:
+            db.detail(view, data, detail)
+        else:
+            db.render(data, linked=linked)
+        d.update()
+
+        if shot and store.available:
+            try:
+                store.log("screenshot %d bytes" % storage.screenshot(fb))
+            except Exception as e:
+                store.log("screenshot failed: %s" % e)
+
+        frames += 1
+
+        if was_linked != linked:
+            store.log("link %s" % ("up" if linked else "down"))
+            was_linked = linked
+
+        now = time.time()
+        if store.available and now - last_save >= SAVE_EVERY:
+            store.save_history(db.links)
+            last_save = now
+            gc.collect()
+
+
+try:
+    main()
+except KeyboardInterrupt:
+    # Fall through to the REPL so the board always stays serviceable.
+    print("interrupted")
+except Exception as exc:
+    import sys
+    sys.print_exception(exc)
+    time.sleep(10)
+    machine.reset()
