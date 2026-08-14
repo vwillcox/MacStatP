@@ -28,7 +28,8 @@ The board shows a standby card until the agent connects.
 
 **Tap any panel** to open a full-screen breakdown of it; tap again to go
 back. **Hold** anywhere on the dashboard to cycle the backlight — the level
-is remembered on the SD card.
+is remembered on the SD card. **Swipe down from the top edge** to switch to
+the desk pet, if it's installed.
 
 The panel runs at its full 480×480 (`Presto(full_res=True)`) and the RP2350
 is overclocked from its stock 200 MHz to 264 MHz in `device/main.py`, which
@@ -83,13 +84,43 @@ the process listing, refreshing it about once a second: a listing is roughly
 ten times the size of the summary frame and costs ~25 ms to collect, so it
 is not worth carrying while nothing is looking at it.
 
+## The second face
+
+The board also runs
+[BuddyPresto](https://github.com/vwillcox/BuddyPresto), a desk pet that
+talks to the Claude desktop app over BLE and lets permission prompts be
+answered from the touchscreen. It shares this project's display face and
+palette, so the two modes look like one device.
+
+```bash
+git clone https://github.com/vwillcox/BuddyPresto.git   # next to this one
+tools/deploy.sh --run
+```
+
+**Swipe down from the top edge** switches between them, either way, and the
+choice is remembered in the SD card config. The BLE bridge runs in both
+modes — the LEDs stay an ambient Claude status light while the dashboard is
+on screen — and a permission prompt brings the pet to the front by itself,
+dropping back to the dashboard once it's answered.
+
+`tools/deploy.sh` picks the package up from `../BuddyPresto/buddy`
+automatically; set `BUDDY_SRC` to point elsewhere, or `BUDDY_SRC=none` to
+deploy the dashboard on its own. With the package absent, `device/main.py`
+logs that and behaves exactly as it did before it existed — nothing here
+depends on the pet being installed.
+
+The one thing to watch: this project overclocks the RP2350 to 264 MHz and
+the radio is driven over PIO SPI. If BLE misbehaves, put `CLOCK_HZ` back to
+`200_000_000` and compare before blaming the bridge.
+
 ## Layout
 
 ```
 host/     agent.py      samples the Mac, sends one JSON line per frame
           macstats.py   all the metric collection
           pilshim.py    PicoGraphics-shaped surface backed by Pillow
-device/   main.py       render loop on the board
+device/   main.py       render loop on the board, and the mode switch
+          buddy_mode.py glue for the BuddyPresto desk pet
           dashboard.py  the panel layout
           widgets.py    cards, radial gauges, meters, sparklines
           font.py       renderer for the custom display face
