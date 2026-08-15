@@ -12,12 +12,26 @@ belongs to this dashboard rather than to a different device.
 If the package isn't on the board, main.py carries on without a buddy.
 """
 
+import json
+import time
+
 import font
 from buddy.app import BuddyApp
 from buddy.lights import Lights
 from buddy.sound import Sound
 from buddy.typo import Type
 from buddy.ui import UI
+
+# Printed on our stdout when the pet levels up, for the agent to pick up.
+# The agent is already draining this stream for the #V: panel tags, so an
+# announcement here reaches the Mac without anyone needing the serial port
+# that the agent itself is holding.
+LEVEL_TAG = "#B:"
+
+# Announcements are one short line, and the agent ignores one that says
+# nothing new, so repeating them costs almost nothing — and it means a
+# level-up that lands while the agent is restarting isn't lost for good.
+ANNOUNCE_EVERY_MS = 600_000
 
 # The transfer protocol is lock-step — one ack per chunk — and a full
 # 480x480 frame costs ~140 ms here, so while a folder push is running we
@@ -28,10 +42,12 @@ XFER_FRAME_SKIP = 8
 class BuddyMode:
     def __init__(self, presto, display, pens, store=None):
         self.store = store
-        self.app = BuddyApp(lights=Lights(presto), sound=Sound())
+        self.app = BuddyApp(lights=Lights(presto), sound=Sound(),
+                            on_level=self._announce)
         width, height = display.get_bounds()
         self.ui = UI(display, pens, Type(display, font=font), width, height)
         self._frame = 0
+        self._announce_at = time.ticks_add(time.ticks_ms(), ANNOUNCE_EVERY_MS)
 
     # --- lifecycle --------------------------------------------------------
 
@@ -44,11 +60,28 @@ class BuddyMode:
     def name(self):
         return self.app.bridge.name
 
+    def _announce(self, level, reward, snapshot):
+        """Tell the Mac about a level-up on the serial line."""
+        snapshot["reward"] = reward[3] if reward else None
+        try:
+            print(LEVEL_TAG + json.dumps(snapshot))
+        except Exception as e:
+            print("buddy: announce failed:", e)
+
+    def announce_now(self):
+        """Publish the current figures without waiting for a level-up —
+        called at startup so the Mac has something to draw straight away."""
+        self._announce(self.app.store.level(),
+                       None, self.app.snapshot())
+
     # --- per-frame --------------------------------------------------------
 
     def tick(self):
         """Moods, LEDs and sound. Runs in both modes."""
         self.app.tick()
+        if time.ticks_diff(time.ticks_ms(), self._announce_at) >= 0:
+            self._announce_at = time.ticks_ms() + ANNOUNCE_EVERY_MS
+            self.announce_now()
 
     def wants_attention(self):
         """True when something needs a human: a permission prompt you

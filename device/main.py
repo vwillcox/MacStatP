@@ -87,6 +87,7 @@ def start_buddy(presto, display, pens, store):
     for task in buddy.tasks():
         asyncio.create_task(task)
     store.log("buddy: advertising as %s" % buddy.name())
+    buddy.announce_now()
     return buddy
 
 

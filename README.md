@@ -103,6 +103,14 @@ modes — the LEDs stay an ambient Claude status light while the dashboard is
 on screen — and a permission prompt brings the pet to the front by itself,
 dropping back to the dashboard once it's answered.
 
+The pet also prints a `#B:` line on its stdout when it levels up. The agent
+is already draining that stream for the `#V:` panel tags, so it picks the
+announcement up, saves the figures and rebuilds the pet's trophy page in
+the background — which is the only way that page can be regenerated
+automatically, since the agent itself is holding the serial port a poller
+would need. Repeats that say nothing new are ignored. `BUDDY_REPO` points
+at the checkout; with it missing, nothing happens.
+
 `tools/deploy.sh` picks the package up from `../BuddyPresto/buddy`
 automatically; set `BUDDY_SRC` to point elsewhere, or `BUDDY_SRC=none` to
 deploy the dashboard on its own. With the package absent, `device/main.py`
@@ -117,6 +125,7 @@ the radio is driven over PIO SPI. If BLE misbehaves, put `CLOCK_HZ` back to
 
 ```
 host/     agent.py      samples the Mac, sends one JSON line per frame
+          test_agent.py tests for the link: unplug, replug, reconnect
           macstats.py   all the metric collection
           pilshim.py    PicoGraphics-shaped surface backed by Pillow
 device/   main.py       render loop on the board, and the mode switch
