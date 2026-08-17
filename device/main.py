@@ -284,5 +284,15 @@ except KeyboardInterrupt:
 except Exception as exc:
     import sys
     sys.print_exception(exc)
+    # Also put it on the SD card. Printing alone goes to a serial line
+    # nobody is reading — the agent drains and discards it — so a crash
+    # that resets the board leaves no trace of why.
+    try:
+        import io
+        buf = io.StringIO()
+        sys.print_exception(exc, buf)
+        storage.Storage().log("crash: " + buf.getvalue()[-500:])
+    except Exception:
+        pass
     time.sleep(10)
     machine.reset()

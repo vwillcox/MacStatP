@@ -16,6 +16,7 @@ import ctypes.util
 import os
 import re
 import subprocess
+import sys
 import time
 
 PAGE_SIZE = 16384  # re-read from vm_stat header at runtime
@@ -48,11 +49,23 @@ def _sysctl(name):
 
 
 def _run(cmd, timeout=3):
+    """Run a command, returning "" if it fails or overruns.
+
+    A silent "" here used to be indistinguishable from a real empty result,
+    which hid a five-second stall for far too long — so overruns are noted
+    on stderr.
+    """
     try:
         return subprocess.run(
             cmd, capture_output=True, text=True, timeout=timeout
         ).stdout
-    except Exception:
+    except subprocess.TimeoutExpired:
+        print("macstats: %s timed out after %ss" % (cmd[0], timeout),
+              file=sys.stderr, flush=True)
+        return ""
+    except Exception as e:
+        print("macstats: %s failed: %s" % (cmd[0], e),
+              file=sys.stderr, flush=True)
         return ""
 
 
@@ -233,8 +246,14 @@ def _disk_counters():
 
 
 def _net_counters():
-    """Per-interface cumulative (rx, tx) byte counters, loopback excluded."""
-    out = _run(["netstat", "-ib"])
+    """Per-interface cumulative (rx, tx) byte counters, loopback excluded.
+
+    -n is essential, not cosmetic: without it netstat reverse-resolves
+    addresses, and with the network down those lookups block until DNS
+    gives up. That turned a 10 ms call into a 5 s one and stalled every
+    frame the display drew.
+    """
+    out = _run(["netstat", "-ibn"])
     per = {}
     for line in out.splitlines()[1:]:
         f = line.split()
@@ -389,7 +408,9 @@ class _NetProcs:
         self.prev_t = None
 
     def sample(self, n=9):
-        out = _run(["nettop", "-P", "-L", "1", "-x", "-J",
+        # -n for the same reason as netstat: name resolution blocks when
+        # the network is down.
+        out = _run(["nettop", "-n", "-P", "-L", "1", "-x", "-J",
                     "bytes_in,bytes_out"], timeout=6)
         now = time.monotonic()
         cur = {}
@@ -435,14 +456,24 @@ def _volume_label(mount):
     return mount.rsplit("/", 1)[-1] or mount
 
 
+_LAST_VOLUMES = []
+
+
 def volumes(n=6):
     """Real mounted volumes, biggest consumer first.
 
     macOS splits the boot disk into several APFS volumes that all report
     the same container size, so the small firmware ones are dropped and
     the rest are labelled by what they actually are.
+
+    df stats every mount, including network shares, so an unreachable
+    server can block it. It gets a short leash and the previous answer is
+    reused rather than emptying the panel.
     """
-    out = _run(["df", "-k"])
+    global _LAST_VOLUMES
+    out = _run(["df", "-k"], timeout=2)
+    if not out:
+        return _LAST_VOLUMES
     rows = []
     for line in out.splitlines()[1:]:
         f = line.split()
@@ -463,7 +494,8 @@ def volumes(n=6):
                      "u": used, "t": total,
                      "v": round(100.0 * used / total, 1)})
     rows.sort(key=lambda r: r["u"], reverse=True)
-    return rows[:n]
+    _LAST_VOLUMES = rows[:n]
+    return _LAST_VOLUMES
 
 
 def gpu_detail():
@@ -501,6 +533,7 @@ class Collector:
         self.net_tx = _Rate()
         self.picker = _NetPicker()
         self.netprocs = _NetProcs()
+        self._last_per = {}   # last usable interface counters
         self._if_rates = {}   # (device, direction) -> _Rate
         self._up = {}         # device -> last known link state
         self._up_at = 0.0
@@ -551,6 +584,12 @@ class Collector:
         c = self.cpu.sample()
         dr, dw = _disk_counters()
         per = _net_counters()
+        if per:
+            self._last_per = per
+        else:
+            # Hold the previous reading rather than dropping the interfaces
+            # off the display entirely for one bad sample.
+            per = self._last_per
         nr, nt = _totals(per)
         cap = disk_capacity("/")
         mem = memory()
