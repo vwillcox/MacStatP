@@ -227,3 +227,133 @@ def trace(d, pens, x, y, w, h, values, colour, peak=None, capacity=None,
         ny = int(y + h - h * min(1.0, vals[i] / hi))
         d.line(px, py, nx, ny, thickness)
         px, py = nx, ny
+
+
+@micropython.native
+def curve_points(x, y, w, h, values, peak=None, capacity=None, span=3):
+    """A Catmull-Rom curve through the samples, one entry per pixel column.
+
+    Returns (start_x, [y_pixel, ...]).
+
+    The curve passes through every sample: this smooths the *line*, not
+    the data. A real spike stays exactly as tall as it was, it just
+    arrives and leaves on a curve instead of a staircase.
+    """
+    if not values:
+        return (x, [])
+    hi = peak if peak else max(values)
+    if not hi or hi <= 0:
+        hi = 1.0
+
+    slots = capacity or len(values)
+    vals = values[-slots:]
+    n = len(vals)
+    if n < 2:
+        return (x, [])
+    step = w / float(slots - 1) if slots > 1 else float(w)
+    if step <= 0:
+        return (x, [])
+    bottom = y + h
+
+    # Sample values become pixel rows once, so the interpolation below
+    # runs in pixel space with no divide in the inner loop.
+    ys = []
+    for v in vals:
+        f = v / hi
+        if f < 0.0:
+            f = 0.0
+        elif f > 1.0:
+            f = 1.0
+        ys.append(bottom - h * f)
+
+    # The cubic is evaluated every `span` pixels, not every pixel, and
+    # the gaps are filled in by walking a straight line between those
+    # knots. Over three pixels a cubic and a chord are indistinguishable,
+    # and evaluating it per pixel was slow enough to miss the frame rate.
+    #
+    # Its coefficients only change when we cross into the next segment —
+    # 59 of those against a few hundred columns — so they are computed
+    # per segment and each knot just evaluates them.
+    knots = []
+    ap = knots.append
+    last = n - 2
+    inv = span / step
+    seg = -1
+    ca = cb = cc = cd = 0.0
+    u = 0.0
+    cols = int((n - 1) * step)
+    for _ in range(cols // span + 1):
+        i = int(u)
+        if i > last:
+            i = last
+        if i != seg:
+            seg = i
+            p1 = ys[i]
+            p2 = ys[i + 1]
+            p0 = ys[i - 1] if i > 0 else p1
+            p3 = ys[i + 2] if i + 2 < n else p2
+            cd = p1
+            cc = 0.5 * (p2 - p0)
+            cb = 0.5 * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3)
+            ca = 0.5 * (3.0 * p1 - 3.0 * p2 + p3 - p0)
+        t = u - i
+        yy = ((ca * t + cb) * t + cc) * t + cd
+        # Catmull-Rom overshoots around a sharp corner; the graph has a
+        # floor and a ceiling, so clamp rather than let it escape.
+        if yy < y:
+            yy = y
+        elif yy > bottom:
+            yy = bottom
+        ap(yy)
+        u += inv
+
+    out = []
+    ap = out.append
+    for k in range(len(knots) - 1):
+        v = knots[k]
+        delta = (knots[k + 1] - v) / span
+        for _ in range(span):
+            ap(int(v))
+            v += delta
+    ap(int(knots[-1]))
+    return (int(x + (slots - n) * step), out)
+
+
+def curve_fill(d, pens, x0, ys, bottom, colour, shade=0.28):
+    """Shade the area under a curve from curve_points().
+
+    Columns at the same height merge into one rectangle — an idle trace
+    is mostly flat, and one wide fill beats two hundred narrow ones.
+    """
+    if not ys:
+        return
+    pens.set(theme.dim(colour, shade))
+    rect = d.rectangle
+    n = len(ys)
+    i = 0
+    while i < n:
+        py = ys[i]
+        j = i + 1
+        while j < n and ys[j] == py:
+            j += 1
+        if bottom > py:
+            rect(x0 + i, py, j - i, bottom - py)
+        i = j
+
+
+def curve_line(d, pens, x0, ys, colour, thickness=2):
+    """Stroke a curve from curve_points().
+
+    Each column spans from the previous row to this one, so a steep
+    climb stays joined instead of breaking into dashes.
+    """
+    if not ys:
+        return
+    pens.set(colour)
+    rect = d.rectangle
+    prev = ys[0]
+    for i in range(len(ys)):
+        py = ys[i]
+        top = py if py < prev else prev
+        rect(x0 + i, top, 1, abs(py - prev) + thickness)
+        prev = py

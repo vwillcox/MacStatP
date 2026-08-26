@@ -157,6 +157,30 @@ went unnoticed because the preview shim happily accepted floats while the
 board raised `TypeError` on exactly the same code — so the shim now
 refuses them too, and a preview fails where the hardware would.
 
+### The network curve
+
+The network page draws a Catmull-Rom curve rather than joining the
+samples with straight segments. Sixty samples across 373 pixels is six
+pixels a sample, which as bars or chords reads as a staircase.
+
+Evaluating the cubic per pixel cost 79 ms a frame, which misses the
+frame rate on its own. Two changes brought it to 30 ms with no visible
+difference:
+
+- the cubic's coefficients change once per segment, not once per pixel,
+  so they are computed 59 times instead of 373
+- the cubic is evaluated every third pixel and the gaps are walked in a
+  straight line — over three pixels a cubic and a chord are the same
+  picture
+
+The curve passes through every sample, so it smooths the *line* and not
+the data: a spike stays exactly as tall as it measured. Catmull-Rom
+overshoots around a sharp corner, so the result is clamped to the plot
+rather than allowed to escape it.
+
+Whole page: 120 ms against the dials' 94 ms, both inside the 143 ms that
+the default 7 fps allows. `clear()` alone is 34 ms of that.
+
 ## The font
 
 The panel uses a purpose-built display face, "Presto Techno" — bold and

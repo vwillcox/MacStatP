@@ -254,10 +254,17 @@ def net_graph(d, pens, data, hist, host="", **_kw):
         pens.set(theme.dim(theme.BORDER, 1.0))
         d.rectangle(gx, int(gy + gh * frac), gw, 1)
 
-    W.sparkline(d, pens, gx, gy, gw, gh, down, theme.TEAL,
-                peak=peak, capacity=hist.depth)
-    W.sparkline(d, pens, gx, gy, gw, gh, up, theme.RED,
-                peak=peak, capacity=hist.depth)
+    # Both areas first, then both lines, so neither trace ends up buried
+    # under the other's fill.
+    dx, dy = W.curve_points(gx, gy, gw, gh, down, peak=peak,
+                            capacity=hist.depth)
+    ux, uy = W.curve_points(gx, gy, gw, gh, up, peak=peak,
+                            capacity=hist.depth)
+    bottom = gy + gh
+    W.curve_fill(d, pens, dx, dy, bottom, theme.TEAL)
+    W.curve_fill(d, pens, ux, uy, bottom, theme.RED)
+    W.curve_line(d, pens, dx, dy, theme.TEAL)
+    W.curve_line(d, pens, ux, uy, theme.RED)
 
     ly = y + h - legend_h + 4
     for i, (label, colour) in enumerate((("DOWN", theme.TEAL),
