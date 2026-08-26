@@ -24,6 +24,34 @@ That's it. No compiler, no `mpremote`, no Python packages to install.
 
 ## Install
 
+Either drag it across from a disk image, or run the installer from a
+clone. Both end up in the same place.
+
+### From a disk image
+
+```bash
+tools/make_dmg.sh          # builds build/MacStatP-<version>.dmg
+open build/MacStatP-*.dmg
+```
+
+Drag both apps onto the Applications folder in the window, then
+**right-click MacStatP in Applications and choose Open**, and confirm.
+
+That right-click is needed exactly once. These apps are signed ad-hoc
+rather than with a paid Apple Developer certificate, so macOS does not
+recognise the signature and refuses a plain double-click. If it still
+refuses:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/MacStatP.app"
+xattr -dr com.apple.quarantine "/Applications/MacStatP Control.app"
+```
+
+The settings page opens, and **Start at login** on the App tab makes it
+come back by itself. Then carry on from step 2 below.
+
+### From a clone
+
 **1. Get the app.**
 
 ```bash

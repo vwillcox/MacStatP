@@ -221,6 +221,7 @@ tools/    deploy.sh        copy the dashboard to the board
           install_buddy.sh install or remove the optional desk pet
           build_app.sh     assemble the .app bundles
           make_dist.sh     rebuild and refresh dist/
+          make_dmg.sh      build a disk image of both apps
           make_icon.py     render the app icon from the panel's own motif
           recover.sh       reflash a board stuck in BOOTSEL
           capture.py       screenshot the board's real framebuffer over USB
@@ -295,6 +296,20 @@ Where `swiftc` isn't available the build falls back to
 `packaging/control.py`, which uses `osascript` for a dialog and needs a
 Dock icon rather than a menu bar item. It can do the same things, less
 elegantly.
+
+### Disk images
+
+`tools/make_dmg.sh` stages both apps with an Applications symlink and a
+plain-text note, and builds a compressed image — about 770 KB. Ad-hoc
+signatures survive it, verified by mounting the result and running
+`codesign --verify` on what comes out.
+
+What does not survive is Gatekeeper's patience. A downloaded image is
+quarantined, and without a Developer ID signature and notarisation macOS
+refuses a plain double-click. Right-click and Open clears it for that
+app, which is why the note inside the image says so rather than leaving
+someone to work it out. Notarising properly needs a paid Apple developer
+account.
 
 ### Committed binaries
 
