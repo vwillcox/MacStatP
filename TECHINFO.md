@@ -172,8 +172,9 @@ back looks exactly like a successful capture, and once did.
 ## Tests
 
 ```bash
-python3 host/test_agent.py    # link handling: unplug, replug, bad samples
-python3 host/test_webui.py    # settings page, over real HTTP
+python3 host/test_agent.py     # link handling: unplug, replug, bad samples
+python3 host/test_webui.py     # settings page, over real HTTP
+python3 host/test_pushcode.py  # the raw REPL transfer, against a fake board
 ```
 
 Both drive the real code paths — a fake serial port for the link, an
@@ -196,6 +197,9 @@ host/     agent.py         samples the Mac, sends one JSON line per frame
           pilshim.py       PicoGraphics-shaped surface backed by Pillow
           test_agent.py    tests for the link
           test_webui.py    tests for the settings page
+          installer.py     borrows the port from the stream loop
+          pushcode.py      raw REPL file transfer, no mpremote needed
+          test_pushcode.py tests for the transfer
 device/   main.py          render loop on the board, and the mode switch
           dashboard.py     panel layout and the packing engine
           widgets.py       cards, radial gauges, meters, sparklines
@@ -231,6 +235,49 @@ deliberately outside the checkout. The launch agent once pointed at a copy
 of the repo that had been moved to another disk and simply sat there
 failing to start; nothing needed at runtime should live at an address that
 can move.
+
+## Installing to the board from the page
+
+The **Presto** tab copies the dashboard onto the board without `mpremote`
+or any other tool, by speaking MicroPython's raw REPL over the serial
+port (`host/pushcode.py`):
+
+```
+\r\x03\x03   interrupt whatever is running
+\x01         enter raw REPL   -> "raw REPL; CTRL-B to exit\r\n>"
+\x04         soft reset       -> a clean VM, and main.py does not re-run
+<code>\x04   run it           -> [OK] stdout \x04 stderr \x04 ">"
+\x02         back to the friendly REPL
+```
+
+Globals persist between submissions in raw mode, so a file is opened
+once and written in chunks of base64.
+
+Three things that had to be right, each of which wedged the board until
+it was:
+
+- **The soft reset is not optional.** Ctrl-C stops the running program
+  but leaves asyncio tasks scheduled, and the desk pet's Bluetooth tasks
+  kept going. Opening a file for writing then blocked and took the board
+  with it. Resetting from raw mode clears everything.
+- **Flow control is not optional either.** The board's USB receive buffer
+  is a couple of hundred bytes, so a single large command overruns it and
+  the board simply stops answering. Raw-paste mode (`\x05A\x01`) has the
+  board advertise a window and ask for more as it consumes.
+- **Anything read past a terminator belongs to the next reply.** Dropping
+  it stalled every command after the first, because a whole reply often
+  arrives in one chunk.
+
+Chunk size and the serial read timeout dominate the transfer: 512-byte
+chunks with a 0.3 s timeout gave 4.3 KB/s, while 4 KB chunks with a
+0.05 s timeout give 18.7 KB/s — the whole dashboard in a few seconds.
+
+The agent holds the port continuously, so an install borrows it:
+`host/installer.py` raises a flag, the stream loop closes its port and
+confirms, the files go across, and the loop reconnects afterwards the way
+it would from any other disconnection. The device's own `.py` files are
+copied into the app bundle at build time, so this works from
+`/Applications` with no checkout present.
 
 ## The menu bar item
 

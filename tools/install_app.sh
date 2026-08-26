@@ -86,6 +86,10 @@ try: print(json.load(open(p))['web_port'])
 except Exception: print(8765)
 ")"
 
+# The point of installing is to get to the settings page.
+sleep 3
+open "http://127.0.0.1:$PORT/" 2>/dev/null || true
+
 echo
 echo "MacStatP is installed and will start at login."
 echo "  settings:  http://127.0.0.1:$PORT/"

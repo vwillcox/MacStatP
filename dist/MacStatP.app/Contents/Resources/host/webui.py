@@ -12,6 +12,8 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import config
+import installer
+import pushcode
 
 LABEL = "local.statusdisplay.agent"
 PLIST = os.path.expanduser("~/Library/LaunchAgents/%s.plist" % LABEL)
@@ -151,6 +153,13 @@ border-radius:5px;padding:3px 9px;font:inherit;font-size:12px;font-weight:400}
 .pill .mv:hover:not(:disabled){color:var(--cyan);border-color:var(--cyan)}
 .pill .mv:disabled{opacity:.3}
 .note{color:var(--mut);font-size:12px;margin:10px 2px 0}
+.big{font-size:15px;padding:13px 26px}
+.log{background:#080b11;border:1px solid var(--line);border-radius:8px;
+padding:12px;margin-top:14px;max-height:260px;overflow:auto;
+font-size:12px;line-height:1.7;white-space:pre-wrap;color:var(--mut)}
+.log b{color:var(--txt);font-weight:400}
+.state{display:flex;align-items:center;gap:10px;font-size:15px;
+margin-bottom:6px}
 #msg{color:var(--grn);font-size:13px;min-height:18px;margin-left:2px}
 #msg.err{color:var(--red)}
 .err{color:var(--red)}
@@ -165,6 +174,22 @@ code{color:var(--amb)}
 <div id="status"></div></div>
 
 <form id="f">
+<div class="card" data-tab="device"><h2>THE PRESTO</h2>
+<div class="state" id="devstate"></div>
+<p class="note" id="devnote"></p>
+<div class="row" id="devbuddyrow" style="display:none">
+<label>Include the desk pet<span class="hint">A BuddyPresto checkout was
+found next to this one</span></label>
+<input type="checkbox" id="devbuddy"></div>
+<div style="margin:16px 0 4px">
+<button type="button" class="big" id="install">Install to the Presto</button>
+</div>
+<div class="log" id="devlog" style="display:none"></div>
+<p class="note">This copies the dashboard onto the board over USB. The
+display agent lets go of the port while it runs and picks it back up
+afterwards, so there is nothing to stop or start by hand. It takes a few
+seconds.</p></div>
+
 <div class="card" data-tab="panels"><h2>PANELS ON THE DISPLAY</h2>
 <div class="plist" id="panels"></div>
 <p class="note">Drag a row, or use the arrows, to change the running
@@ -239,7 +264,7 @@ effect next start</span></label>
 const $=i=>document.getElementById(i);
 let choices={};
 
-const TABS=[["status","Status"],["panels","Panels"],
+const TABS=[["status","Status"],["device","Presto"],["panels","Panels"],
             ["connection","Connection"],["display","Display"],
             ["measure","Measure"],["app","App"]];
 const PANELS=[["cpu","CPU"],["gpu","GPU"],["mem","Memory"],
@@ -340,6 +365,56 @@ function placeBefore(src,target){
   renderPanels(enabled);
 }
 function buildPanels(){}
+
+// ── the Presto tab ──────────────────────────────────────────────────
+let installing=false;
+async function refreshDevice(){
+  let d;
+  try{d=await (await fetch('/api/device')).json();}catch(e){return;}
+  const st=$('devstate'),note=$('devnote'),btn=$('install'),log=$('devlog');
+  const job=d.install||{};
+  installing=!!job.running;
+
+  const found=(d.ports||[]).length>0;
+  st.innerHTML='<i class="dot '+(found?'on':'off')+'"></i>'+
+    (found?'Presto connected':'No Presto found');
+  note.textContent=found
+    ? d.ports.join(', ')
+    : 'Connect the board with a USB-C cable. Make sure the cable carries '
+      +'data — a charge-only one will not show up.';
+
+  $('devbuddyrow').style.display=d.buddy_available?'':'none';
+  btn.disabled=!found||!d.ready||installing;
+  btn.textContent=installing?'Installing…':'Install to the Presto';
+  if(!d.ready) note.textContent='The device files are missing from this '
+    +'copy of the app, so installing is unavailable.';
+
+  if((job.log||[]).length){
+    log.style.display='';
+    log.innerHTML=job.log.map(l=>'<b>'+l.replace(/[<&]/g,
+      c=>c==='<'?'&lt;':'&amp;')+'</b>').join('\\n');
+    log.scrollTop=log.scrollHeight;
+    if(job.finished&&!installing){
+      log.innerHTML+='\\n'+(job.ok
+        ? '<b style="color:var(--grn)">Installed in '+job.elapsed+'s. '
+          +'The board is restarting.</b>'
+        : '<b style="color:var(--red)">Install failed — see above.</b>');
+    }
+  }
+}
+$('install').addEventListener('click',async()=>{
+  const btn=$('install');
+  btn.disabled=true;btn.textContent='Installing…';
+  $('devlog').style.display='';$('devlog').textContent='Starting…';
+  try{
+    const r=await fetch('/api/install',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({buddy:$('devbuddy').checked})});
+    const d=await r.json();
+    if(!d.ok) $('devlog').textContent=d.error||'could not start';
+  }catch(e){$('devlog').textContent=String(e);}
+  refreshDevice();
+});
 function opts(sel,list,cur,blank){
   sel.innerHTML='';
   if(blank!==undefined){const o=document.createElement('option');
@@ -443,7 +518,10 @@ $('reset').addEventListener('click',async()=>{
     body:JSON.stringify({reset:true})});
   dirty=false;refresh();
 });
-buildTabs();buildPanels();refresh();setInterval(refresh,2000);
+buildTabs();buildPanels();refresh();refreshDevice();
+setInterval(refresh,2000);
+// The install log wants to move faster than the rest of the page.
+setInterval(()=>{if(tab==="device"||installing)refreshDevice();},700);
 </script></body></html>
 """
 
@@ -520,6 +598,15 @@ class _Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path == "/":
             return self._send(200, PAGE, "text/html; charset=utf-8")
+        if path == "/api/device":
+            src = installer.buddy_source(os.path.dirname(
+                os.path.abspath(__file__)))
+            return self._send(200, json.dumps({
+                "ports": pushcode.find_ports(),
+                "ready": installer.DEVICE_DIR is not None,
+                "buddy_available": src is not None,
+                "install": installer.INSTALLER.status(),
+            }))
         if path == "/api/state":
             try:
                 ch = choices()
@@ -536,7 +623,22 @@ class _Handler(BaseHTTPRequestHandler):
         return self._send(404, json.dumps({"error": "not found"}))
 
     def do_POST(self):
-        if self.path.split("?", 1)[0] != "/api/config":
+        route = self.path.split("?", 1)[0]
+        if route == "/api/install":
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(n)) if n else {}
+            except Exception:
+                body = {}
+            src = installer.buddy_source(os.path.dirname(
+                os.path.abspath(__file__)))
+            ok, why = installer.INSTALLER.start(
+                port=body.get("port") or None,
+                with_buddy=bool(body.get("buddy")),
+                buddy_src=src)
+            return self._send(200 if ok else 409,
+                              json.dumps({"ok": ok, "error": why}))
+        if route != "/api/config":
             return self._send(404, json.dumps({"error": "not found"}))
         try:
             n = int(self.headers.get("Content-Length") or 0)

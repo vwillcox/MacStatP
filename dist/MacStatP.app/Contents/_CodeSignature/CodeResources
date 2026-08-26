@@ -8,21 +8,65 @@
 		<data>
 		Brp5tiTBn1JTxrCW5gefbgzC89Q=
 		</data>
+		<key>Resources/device/buddy_mode.py</key>
+		<data>
+		itqlBiDgAEdmV4/IqIkd+7vCTnM=
+		</data>
+		<key>Resources/device/dashboard.py</key>
+		<data>
+		IQ3EzP+x6km9tASFqQCp12v1V/s=
+		</data>
+		<key>Resources/device/font.py</key>
+		<data>
+		/kj7n8uuddj+J8+8kYPBgGp/lDk=
+		</data>
+		<key>Resources/device/font_data.py</key>
+		<data>
+		rTaj0Nj7Yaj8NJZlNFPkmT4aQ8Q=
+		</data>
+		<key>Resources/device/link.py</key>
+		<data>
+		hZdgZj7RNwiCWn1Q3W1LG3D8iVk=
+		</data>
+		<key>Resources/device/main.py</key>
+		<data>
+		DbJjhJIlAv7Yn/Oqtq+1wEv3bc8=
+		</data>
+		<key>Resources/device/storage.py</key>
+		<data>
+		Slge+QVsUt+vcEVZf4bs9OtkpL4=
+		</data>
+		<key>Resources/device/theme.py</key>
+		<data>
+		MEFYKlgaIK3tlQXOmi2hOh/K62Y=
+		</data>
+		<key>Resources/device/widgets.py</key>
+		<data>
+		IqinPnUJQJsmqQ5FekNj28vhkjY=
+		</data>
 		<key>Resources/host/agent.py</key>
 		<data>
-		P3sRjPQv6UWtZ0+p0pUTbKAFrYM=
+		y3gNQC5Q0Re60nh0yKw3x7WUNKE=
 		</data>
 		<key>Resources/host/config.py</key>
 		<data>
 		U3ClLT0aXbhHDWaqi/cu2TaBGI8=
 		</data>
+		<key>Resources/host/installer.py</key>
+		<data>
+		9JZ0lhdnl8lQILrwYQH4kIFPaAY=
+		</data>
 		<key>Resources/host/macstats.py</key>
 		<data>
 		7suQV7M22YrpPqcZoKP8Hie2zTQ=
 		</data>
+		<key>Resources/host/pushcode.py</key>
+		<data>
+		nSHzRBk7pwVvImDADNjLt/y8HfM=
+		</data>
 		<key>Resources/host/webui.py</key>
 		<data>
-		1GqsOBpdYreoXQPxrO4npMHCqHs=
+		yTn6YJRZNp87swDRoAQUuf/Q0vc=
 		</data>
 		<key>Resources/launch.py</key>
 		<data>
@@ -38,11 +82,74 @@
 			81nvCR2No6GhRzgA5fcp0feE5tldCNaIevcziedTFj0=
 			</data>
 		</dict>
+		<key>Resources/device/buddy_mode.py</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			UMalRQKs0OqAez/3rVw1sTICFuJtPXUMt99TMhsXtxM=
+			</data>
+		</dict>
+		<key>Resources/device/dashboard.py</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			dl67teBOW1RZPu4SjBzjdoBLizONR0bYs8eORMi0Sk0=
+			</data>
+		</dict>
+		<key>Resources/device/font.py</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			RvDBQgUkD7GqzLwgE/plp8vS4RAvMrE0+5zlt3exilw=
+			</data>
+		</dict>
+		<key>Resources/device/font_data.py</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			pPvyJJaqW5lYLxS1yDwo2wD2stoQBffkxc9u5Mvd2G4=
+			</data>
+		</dict>
+		<key>Resources/device/link.py</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			6mnCsWrznq9bHzgxQ88XoXcQ2l5r3bJd4wgrWdJr8Pg=
+			</data>
+		</dict>
+		<key>Resources/device/main.py</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			rC2yUAcbDJNcoW3ipR6mplozB3mp9h2inrDrhMuxQ4o=
+			</data>
+		</dict>
+		<key>Resources/device/storage.py</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			8QwjXOY9BaHBNpy3Ot9YCcnRBVce39Tq+cbtgfycM0Y=
+			</data>
+		</dict>
+		<key>Resources/device/theme.py</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			eQ5p2lPLx7AFIj845M+JoUPbObB88olhiPsaql0BWyI=
+			</data>
+		</dict>
+		<key>Resources/device/widgets.py</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			n1jw+kA3ucBH3UduLIe51zmKUP8nhLNIi6IzjWnGB7s=
+			</data>
+		</dict>
 		<key>Resources/host/agent.py</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			zTf57b6PkvRNGG9rcJ6KcRhe8mlX3R8uYa3hT1F/3gg=
+			es6DDLIYLJ58qhE9CC/DMveMEsfWRG4lQPoq19/G1ZI=
 			</data>
 		</dict>
 		<key>Resources/host/config.py</key>
@@ -52,6 +159,13 @@
 			hrA9B21d63B3tXmhq9qsuDcygFz+lL/ncWQ9wfrOFiI=
 			</data>
 		</dict>
+		<key>Resources/host/installer.py</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			1ttPCE3WyOSzfxzj2Fa0HQ91Jfkt/74Oo0PCn8h9Dv0=
+			</data>
+		</dict>
 		<key>Resources/host/macstats.py</key>
 		<dict>
 			<key>hash2</key>
@@ -59,11 +173,18 @@
 			tt3llSzndzyWPyaP42QMKv5n8ioD+8geid2fnGdd2Rs=
 			</data>
 		</dict>
+		<key>Resources/host/pushcode.py</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			oJ7TOQeM8YNSVzr2M2DrJCJSOAOJ1bUZzP1kDkukYYg=
+			</data>
+		</dict>
 		<key>Resources/host/webui.py</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			ctKnjl35nPBT1VacbNLcFBMtWKsa0giF5Kpcp2YYhcY=
+			dPy3AJ/zXe0ScxfF4gaW6AdvCFCE1Z4h/24kWAxFnRQ=
 			</data>
 		</dict>
 		<key>Resources/launch.py</key>

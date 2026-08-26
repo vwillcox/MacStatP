@@ -11,10 +11,15 @@ rm -rf "$OUT"
 mkdir -p "$OUT/Contents/MacOS" "$OUT/Contents/Resources/host"
 
 # The agent and everything it imports at runtime.
-for f in agent.py macstats.py config.py webui.py; do
+for f in agent.py macstats.py config.py webui.py installer.py pushcode.py; do
   cp "$ROOT/host/$f" "$OUT/Contents/Resources/host/"
 done
 cp "$ROOT/packaging/launch.py" "$OUT/Contents/Resources/"
+
+# The board's own code travels with the app, so the Install button works
+# from a copy in /Applications with no checkout anywhere.
+mkdir -p "$OUT/Contents/Resources/device"
+cp "$ROOT"/device/*.py "$OUT/Contents/Resources/device/"
 
 sed "s/__VERSION__/$VERSION/g" "$ROOT/packaging/Info.plist" \
   > "$OUT/Contents/Info.plist"

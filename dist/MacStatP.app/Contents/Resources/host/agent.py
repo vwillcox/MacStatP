@@ -23,6 +23,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import config
+import installer
 import macstats
 import webui
 
@@ -202,6 +203,11 @@ def main():
               file=sys.stderr)
         return 1
 
+    installer.DEVICE_DIR = installer.find_device_dir(HERE)
+    if installer.DEVICE_DIR is None:
+        print("device files not found — install from the page is disabled",
+              flush=True)
+
     status = webui.Status()
     status.set(started=time.time())
     url = None
@@ -264,6 +270,21 @@ def stream(args, col, serial, cfgw, status, limit=None):
                 except Exception:
                     pass
                 ser = None
+
+        # An install needs the port to itself. Let go, wait, and pick up
+        # again afterwards like any other disconnection.
+        if installer.INSTALLER.pause_requested():
+            if ser is not None:
+                try:
+                    ser.close()
+                except Exception:
+                    pass
+                ser = None
+                print("released the port for an install", flush=True)
+            status.set(connected=False, port=None)
+            installer.INSTALLER.confirm_released()
+            time.sleep(0.5)
+            continue
 
         try:
             if ser is None:

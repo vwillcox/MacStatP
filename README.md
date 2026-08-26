@@ -16,107 +16,36 @@ Tap a panel for a breakdown of what's actually using it.
 - A **Pimoroni Presto** running Pimoroni's MicroPython build.
   [v2.0.0](https://github.com/pimoroni/presto/releases/tag/v2.0.0) or later
   is recommended: it renders about 11% faster and adds screen rotation.
-  Earlier builds work, minus the rotation setting.
-- A **Mac** (Apple silicon or Intel), macOS 12 or newer
-- A **USB-C cable** between the two
-- [`mpremote`](https://docs.micropython.org/en/latest/reference/mpremote.html)
-  to copy files to the board: `pip3 install --user mpremote`
+- A **Mac** (Apple silicon), macOS 12 or newer
+- A **USB-C cable** between the two — one that carries data, not a
+  charge-only lead
 
-Nothing needs `sudo`, and nothing needs an internet connection once the
-repo is cloned.
+That's it. No compiler, no `mpremote`, no Python packages to install.
 
 ## Install
 
-**1. Put the dashboard on the board.**
+**1. Get the app.**
 
 ```bash
 git clone https://github.com/vwillcox/MacStatP.git
 cd MacStatP
-tools/deploy.sh --run
-```
-
-The screen should show a standby card saying it's waiting for your Mac.
-
-**2. Install the Mac app.**
-
-```bash
 tools/install_app.sh
 ```
 
-This builds from source if you have Xcode's command line tools, and
-otherwise installs the prebuilt copies in [`dist/`](dist/) — so it works
-either way. See [using the prebuilt apps](#using-the-prebuilt-apps) if
-you would rather skip the build entirely.
+It installs MacStatP into `/Applications`, sets it to start at login,
+adds a menu bar item, and opens the settings page in your browser.
 
-This builds `MacStatP.app`, puts it in `/Applications`, and sets it to
-start at login and restart itself if it ever stops. It runs in the
-background — no Dock icon. Within a few seconds the board should come to
-life.
+**2. Connect the Presto** with a USB-C cable.
 
-If it stops with a permissions error, `~/Library/LaunchAgents` is owned by
-root on your machine. The script prints the one `sudo chown` command that
-fixes it; run that and try again.
+**3. Press "Install to the Presto".** On the **Presto** tab, the page will
+say whether it can see the board. One button copies the dashboard onto it —
+about twenty seconds, with a running log — and the board restarts into the
+dashboard by itself.
 
-**3. Open the settings** at **http://127.0.0.1:8765/** — or use the menu
-bar item, below.
+**4. Set it up however you like** on the other tabs.
 
-## Using the prebuilt apps
-
-`dist/` holds both apps, already built, so you don't need a compiler:
-
-```bash
-open dist/
-```
-
-Drag **MacStatP.app** and **MacStatP Control.app** into `/Applications`,
-then open MacStatP Control from there — its **Open at Login** menu item
-sets it to come back after a reboot.
-
-To have the display agent start at login too, run `tools/install_app.sh`
-once; it registers the launch agent (and will happily reuse these same
-prebuilt copies).
-
-A few things worth knowing:
-
-- The menu bar item is compiled for **Apple Silicon**. On an Intel Mac,
-  build it yourself with `SWIFT_TARGET=x86_64-apple-macosx12.0
-  tools/build_app.sh`.
-- The apps are ad-hoc signed, not notarised. Cloning the repo with `git`
-  is fine, but if you download it as a **ZIP** macOS quarantines it and
-  will refuse to open them. Clear that with:
-  ```bash
-  xattr -dr com.apple.quarantine dist/*.app
-  ```
-- `dist/BUILD.txt` records which commit they were built from. If you
-  change anything under `host/` or `packaging/`, refresh them with
-  `tools/make_dist.sh` — otherwise they drift from the source.
-
-## The menu bar item
-
-`tools/install_app.sh` also installs **MacStatP Control**, which puts a
-small gauge icon in the menu bar. The agent itself runs in the background
-with no interface, so this is where you reach it:
-
-| Menu | |
-|---|---|
-| **Open Settings…** | The configuration page |
-| **Restart Agent** | Restarts the background agent |
-| **Stop Agent** / **Start Agent** | Whichever applies |
-| **Show Log** | Opens `agent.log` |
-| **Show in Dock** | Adds a Dock icon as well as the menu bar item |
-| **Open at Login** | Brings the menu bar item back after a restart |
-| **Quit** | Closes the menu bar item; the agent keeps running |
-
-The top of the menu shows what's happening — whether the agent is
-running, whether the board is connected, and how many frames have been
-sent.
-
-It starts in the menu bar. **Show in Dock** adds a Dock icon too, if you'd
-rather have it there; it's the same process either way. Turn **Open at
-Login** on if you want the icon back automatically after a reboot —
-the display agent itself already starts on its own.
-
-Launch it any time from `/Applications/MacStatP Control.app`.
+That's the whole thing. The install step talks to the board's own REPL over
+USB, so nothing else needs to be installed to make it work.
 
 ## Using it
 
@@ -219,8 +148,12 @@ on while the setting said "off" would be misleading.
 `python3 host/agent.py` in a terminal to see what it says.
 
 **Nothing on the screen at all.** Unplug the USB cable, wait a few
-seconds, plug it back in. If it's still dead, see
+seconds, plug it back in, then press **Install to the Presto** again. If
+it's still dead, see
 [recovering a wedged board](TECHINFO.md#recovering-a-wedged-board).
+
+**"No Presto found".** Check the cable carries data — a charge-only lead
+powers the board but never appears to the Mac.
 
 **A setting didn't seem to apply.** The board reports back what it
 actually applied, and the app logs it. Look for `board applied` in
