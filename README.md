@@ -43,6 +43,11 @@ The screen should show a standby card saying it's waiting for your Mac.
 tools/install_app.sh
 ```
 
+This builds from source if you have Xcode's command line tools, and
+otherwise installs the prebuilt copies in [`dist/`](dist/) — so it works
+either way. See [using the prebuilt apps](#using-the-prebuilt-apps) if
+you would rather skip the build entirely.
+
 This builds `MacStatP.app`, puts it in `/Applications`, and sets it to
 start at login and restart itself if it ever stops. It runs in the
 background — no Dock icon. Within a few seconds the board should come to
@@ -54,6 +59,37 @@ fixes it; run that and try again.
 
 **3. Open the settings** at **http://127.0.0.1:8765/** — or use the menu
 bar item, below.
+
+## Using the prebuilt apps
+
+`dist/` holds both apps, already built, so you don't need a compiler:
+
+```bash
+open dist/
+```
+
+Drag **MacStatP.app** and **MacStatP Control.app** into `/Applications`,
+then open MacStatP Control from there — its **Open at Login** menu item
+sets it to come back after a reboot.
+
+To have the display agent start at login too, run `tools/install_app.sh`
+once; it registers the launch agent (and will happily reuse these same
+prebuilt copies).
+
+A few things worth knowing:
+
+- The menu bar item is compiled for **Apple Silicon**. On an Intel Mac,
+  build it yourself with `SWIFT_TARGET=x86_64-apple-macosx12.0
+  tools/build_app.sh`.
+- The apps are ad-hoc signed, not notarised. Cloning the repo with `git`
+  is fine, but if you download it as a **ZIP** macOS quarantines it and
+  will refuse to open them. Clear that with:
+  ```bash
+  xattr -dr com.apple.quarantine dist/*.app
+  ```
+- `dist/BUILD.txt` records which commit they were built from. If you
+  change anything under `host/` or `packaging/`, refresh them with
+  `tools/make_dist.sh` — otherwise they drift from the source.
 
 ## The menu bar item
 

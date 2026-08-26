@@ -1,0 +1,9 @@
+Prebuilt MacStatP apps.
+
+built from: 1d06626
+built on:   2026-08-26 19:20 UTC
+menu bar:   arm64 (Apple Silicon)
+
+These are a convenience, not the source of truth. If you have changed
+anything under host/ or packaging/, run tools/make_dist.sh again or
+install from source with tools/install_app.sh.

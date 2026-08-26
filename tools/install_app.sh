@@ -32,7 +32,18 @@ if ! /usr/bin/python3 -c "import serial" 2>/dev/null; then
   /usr/bin/pip3 install --user --quiet pyserial
 fi
 
-"$HERE/build_app.sh"
+# Build from source when we can. Without a Swift compiler there would be
+# no menu bar item, so fall back to the copies committed in dist/.
+SRC="$ROOT/build"
+if command -v swiftc >/dev/null 2>&1; then
+  "$HERE/build_app.sh"
+elif [[ -d "$ROOT/dist/MacStatP.app" ]]; then
+  echo "no swiftc — installing the prebuilt apps from dist/"
+  sed -n '3,5p' "$ROOT/dist/BUILD.txt" 2>/dev/null || true
+  SRC="$ROOT/dist"
+else
+  "$HERE/build_app.sh"
+fi
 
 # Prefer /Applications, fall back to the user's own when it is not writable.
 DEST="/Applications"
@@ -43,8 +54,8 @@ mkdir -p "$DEST" "$LOGDIR"
 stop_agent
 sleep 1
 rm -rf "$DEST/MacStatP.app" "$DEST/MacStatP Control.app"
-cp -R "$ROOT/build/MacStatP.app" "$DEST/"
-cp -R "$ROOT/build/MacStatP Control.app" "$DEST/"
+cp -R "$SRC/MacStatP.app" "$DEST/"
+cp -R "$SRC/MacStatP Control.app" "$DEST/"
 APP="$DEST/MacStatP.app/Contents/MacOS/MacStatP"
 echo "installed to $DEST/MacStatP.app"
 echo "installed to $DEST/MacStatP Control.app"

@@ -209,10 +209,14 @@ packaging/launch.py        entry point inside the agent .app bundle
           MenuBar.swift    the menu bar item, compiled at build time
           Control-Info.plist  its bundle metadata
           control.py       scripted fallback where Swift is unavailable
+dist/     MacStatP.app     prebuilt, committed so no compiler is needed
+          MacStatP Control.app
+          BUILD.txt        which commit they came from
 tools/    deploy.sh        copy the dashboard to the board
           install_app.sh   build and install MacStatP.app
           install_buddy.sh install or remove the optional desk pet
-          build_app.sh     assemble the .app bundle
+          build_app.sh     assemble the .app bundles
+          make_dist.sh     rebuild and refresh dist/
           make_icon.py     render the app icon from the panel's own motif
           recover.sh       reflash a board stuck in BOOTSEL
           capture.py       screenshot the board's real framebuffer over USB
@@ -244,6 +248,26 @@ Where `swiftc` isn't available the build falls back to
 `packaging/control.py`, which uses `osascript` for a dialog and needs a
 Dock icon rather than a menu bar item. It can do the same things, less
 elegantly.
+
+### Committed binaries
+
+`dist/` holds both bundles already built. Committing build output is
+normally a bad habit — it goes stale, and the binary stops matching the
+source that claims to produce it. It earns its place here for one
+reason: without a Swift compiler there is no menu bar item at all, and
+requiring Xcode's command line tools to get a menu bar icon is a poor
+trade.
+
+Two mitigations. `dist/BUILD.txt` records the commit they were built
+from, so drift is visible rather than silent, and `tools/make_dist.sh`
+refreshes them in one step. `tools/install_app.sh` still builds from
+source whenever `swiftc` is present, and only falls back to `dist/`
+when it is not.
+
+The bundles are ad-hoc signed. That survives a `git` round trip, since
+the signature lives in the file contents rather than in extended
+attributes — but a ZIP download picks up `com.apple.quarantine`, which
+has to be cleared before macOS will open them.
 
 `LSUIElement` is true in its Info.plist, so it starts in the menu bar.
 "Show in Dock" calls `setActivationPolicy(.regular)` at runtime, which

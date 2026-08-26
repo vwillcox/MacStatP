@@ -1,0 +1,8 @@
+#!/bin/sh
+# Resolve the bundle, then hand over to the Python entry point. The
+# executable path is exported so the settings page can write a launch
+# agent that points back at this bundle.
+DIR="$(cd "$(dirname "$0")/../Resources" && pwd)"
+MACSTATP_EXE="$(cd "$(dirname "$0")" && pwd)/MacStatP"
+export MACSTATP_EXE
+exec /usr/bin/python3 "$DIR/launch.py" "$@"

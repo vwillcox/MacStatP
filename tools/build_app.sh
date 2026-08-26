@@ -54,11 +54,12 @@ sed "s/__VERSION__/$VERSION/g" "$ROOT/packaging/Control-Info.plist" \
 # Where Swift isn't available, fall back to the scripted version: it can
 # only manage a Dock icon and a dialog, but it needs nothing installed.
 if command -v swiftc >/dev/null 2>&1; then
-  swiftc -O -sdk "$(xcrun --show-sdk-path)" \
-    -target arm64-apple-macosx12.0 \
-    -o "$CTL/Contents/MacOS/MacStatP Control" \
-    "$ROOT/packaging/MenuBar.swift"
-  echo "  control: menu bar (compiled)"
+  # Apple Silicon only. For an Intel or universal build, change or add to
+  # SWIFT_TARGET; nothing else here cares.
+  SWIFT_TARGET="${SWIFT_TARGET:-arm64-apple-macosx12.0}"
+  swiftc -O -sdk "$(xcrun --show-sdk-path)" -target "$SWIFT_TARGET" \
+    -o "$CTL/Contents/MacOS/MacStatP Control" "$ROOT/packaging/MenuBar.swift"
+  echo "  control: menu bar ($(lipo -archs "$CTL/Contents/MacOS/MacStatP Control"))"
 else
   cp "$ROOT/host/config.py" "$CTL/Contents/Resources/host/"
   cp "$ROOT/packaging/control.py" "$CTL/Contents/Resources/"
