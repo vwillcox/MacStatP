@@ -91,6 +91,25 @@ class FakeCollector:
 
 class Args:
     port = None
+    hz = None
+
+
+class FakeWatcher:
+    """Settings that never change, so stream() uses them as given."""
+
+    def __init__(self, **over):
+        import config
+        self.cfg = dict(config.DEFAULTS)
+        self.cfg.update(over)
+        self.cfg["hz"] = 100.0      # the sleep is stubbed out anyway
+
+    def poll(self):
+        return False
+
+
+def status():
+    import webui
+    return webui.Status()
 
 
 def harness():
@@ -112,7 +131,7 @@ def test_waits_for_a_missing_board():
     agent.find_port = lambda explicit=None: None
     col = FakeCollector()
 
-    agent.stream(Args(), col, FakeSerial({}), 0.01, limit=25)
+    agent.stream(Args(), col, FakeSerial({}), FakeWatcher(), status(), limit=25)
 
     waits = [line for line in logged if "waiting" in line]
     check("does not exit when there's no port", True)
@@ -136,7 +155,7 @@ def test_reconnects_after_an_unplug():
     serial._ports["/dev/cu.usbmodem1201"] = port2
 
     col = FakeCollector()
-    agent.stream(Args(), col, serial, 0.01, limit=20)
+    agent.stream(Args(), col, serial, FakeWatcher(), status(), limit=20)
 
     check("wrote frames before the unplug", len(port.writes) == 3, port.writes)
     check("closed the dead port", port.closed)
@@ -159,7 +178,7 @@ def test_primes_rates_on_reconnect():
     agent.find_port = lambda explicit=None: "/dev/cu.usbmodem3101"
     col = FakeCollector()
 
-    agent.stream(Args(), col, serial, 0.01, limit=1)
+    agent.stream(Args(), col, serial, FakeWatcher(), status(), limit=1)
     # One throwaway sample to re-prime the deltas, one that gets sent. The
     # first frame after a nine-hour gap must not be a nine-hour average.
     check("discards one sample on connect", col.samples == 2, col.samples)
@@ -174,7 +193,7 @@ def test_survives_a_bad_sample():
     agent.find_port = lambda explicit=None: "/dev/cu.usbmodem3101"
     col = FakeCollector(raise_times=(3,))   # the second published frame
 
-    agent.stream(Args(), col, serial, 0.01, limit=6)
+    agent.stream(Args(), col, serial, FakeWatcher(), status(), limit=6)
 
     check("keeps going after a sampling error", col.samples >= 5, col.samples)
     check("logged it", any("sampling error" in line for line in logged), logged)
@@ -189,7 +208,7 @@ def test_read_failure_is_a_disconnect():
     serial = FakeSerial({"/dev/cu.usbmodem3101": port})
     agent.find_port = lambda explicit=None: "/dev/cu.usbmodem3101"
 
-    agent.stream(Args(), FakeCollector(), serial, 0.01, limit=4)
+    agent.stream(Args(), FakeCollector(), serial, FakeWatcher(), status(), limit=4)
 
     check("a dead read reconnects rather than spinning", port.closed)
     check("logged the link error",
@@ -260,7 +279,7 @@ def test_stream_reacts_to_a_level_up():
     real = agent.on_level_up
     agent.on_level_up = lambda payload, repo=None: seen.append(payload)
     try:
-        agent.stream(Args(), FakeCollector(), serial, 0.01, limit=3)
+        agent.stream(Args(), FakeCollector(), serial, FakeWatcher(), status(), limit=3)
     finally:
         agent.on_level_up = real
 

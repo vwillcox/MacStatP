@@ -8,7 +8,6 @@ anyone who can reach it can read what the machine is doing.
 import glob
 import json
 import os
-import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -257,29 +256,38 @@ refresh();setInterval(refresh,2000);
 
 
 def set_login_item(enable, app_path=None):
-    """Install or remove the launch agent. Returns a short note."""
-    uid = os.getuid()
-    target = "gui/%d/%s" % (uid, LABEL)
+    """Add or remove the launch agent. Returns a short note.
+
+    This deliberately only writes or deletes the plist and never calls
+    launchctl. The settings page is served by the agent itself, so a
+    bootout here would kill the process handling the request — which is
+    exactly what happened: saving any setting with this box ticked
+    unloaded the agent and the display stopped.
+
+    Registering with launchd is the installer's job, from outside the
+    process. Toggling here decides what happens at the next login and
+    leaves the running agent alone.
+    """
     if not enable:
-        subprocess.run(["launchctl", "bootout", target],
-                       capture_output=True)
         try:
             os.remove(PLIST)
-        except OSError:
-            pass
-        return "will not start at login"
+        except FileNotFoundError:
+            return ""
+        except OSError as e:
+            return "could not remove login item: %s" % e
+        return "will not start at login (still running now)"
 
     exe = app_path or os.environ.get("MACSTATP_EXE")
     if not exe or not os.path.exists(exe):
         return "install the app first to enable this"
-    os.makedirs(os.path.dirname(PLIST), exist_ok=True)
-    with open(PLIST, "w") as f:
-        f.write(_PLIST_TEMPLATE % {"label": LABEL, "exe": exe,
-                                   "logs": os.path.expanduser(
-                                       "~/Library/Logs/StatusDisplay")})
-    subprocess.run(["launchctl", "bootout", target], capture_output=True)
-    subprocess.run(["launchctl", "bootstrap", "gui/%d" % uid, PLIST],
-                   capture_output=True)
+    try:
+        os.makedirs(os.path.dirname(PLIST), exist_ok=True)
+        with open(PLIST, "w") as f:
+            f.write(_PLIST_TEMPLATE % {"label": LABEL, "exe": exe,
+                                       "logs": os.path.expanduser(
+                                           "~/Library/Logs/StatusDisplay")})
+    except OSError as e:
+        return "could not write login item: %s" % e
     return "will start at login"
 
 
@@ -353,10 +361,12 @@ class _Handler(BaseHTTPRequestHandler):
 
         note = ""
         if "login" in body:
-            try:
-                note = set_login_item(bool(body.pop("login")))
-            except Exception as e:
-                note = "login item failed: %s" % e
+            want = bool(body.pop("login"))
+            if want != login_item_enabled():
+                try:
+                    note = set_login_item(want)
+                except Exception as e:
+                    note = "login item failed: %s" % e
         try:
             saved = config.save({**config.load(), **body})
         except Exception as e:

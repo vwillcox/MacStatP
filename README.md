@@ -52,6 +52,12 @@ The app serves a configuration page on the loopback interface only:
 | Interfaces | Auto-detect the Wi-Fi and wired links, or choose them |
 | Start at login | Adds or removes the launch agent |
 
+Turning "start at login" off leaves the running agent alone — it decides
+what happens at the next login, not what happens now. The page is served
+*by* the agent, so it never runs `launchctl` against its own label:
+doing that unloaded the agent mid-request, and changing the brightness
+would stop the display.
+
 Changes apply without restarting anything: the agent notices the file
 changed and picks it up on the next frame. The board confirms what it
 actually applied on its serial line, which the agent logs as
@@ -173,6 +179,7 @@ host/     agent.py      samples the Mac, sends one JSON line per frame
           config.py     settings, stored outside the checkout
           webui.py      the configuration page, loopback only
           test_agent.py tests for the link: unplug, replug, reconnect
+          test_webui.py tests for the settings page
           macstats.py   all the metric collection
           pilshim.py    PicoGraphics-shaped surface backed by Pillow
 packaging/launch.py     entry point inside the .app bundle
@@ -217,6 +224,16 @@ depending on where they landed, which is what made small text look soft.
 python3 tools/fontpreview.py   # specimen sheet
 python3 tools/build_font.py    # rebuild device/font_data.py
 ```
+
+## Tests
+
+```bash
+python3 host/test_agent.py    # link handling: unplug, replug, bad samples
+python3 host/test_webui.py    # settings page, over real HTTP
+```
+
+Both drive the real code paths — a fake serial port for the link, an
+actual server for the page.
 
 ## Working on the layout
 
