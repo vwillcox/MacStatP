@@ -29,16 +29,23 @@ if [[ ! -f "$ROOT/build/AppIcon.icns" ]]; then
 fi
 cp "$ROOT/build/AppIcon.icns" "$OUT/Contents/Resources/AppIcon.icns"
 
-cat > "$OUT/Contents/MacOS/MacStatP" <<'STUB'
+# A compiled entry point, not a shell stub: Apple's notary service wants
+# a bundle's main executable to be a Mach-O binary, and rejects a script
+# however it is signed. Falls back to a stub where Swift is unavailable,
+# which still runs — it just cannot be notarised.
+if command -v swiftc >/dev/null 2>&1; then
+  swiftc -O -sdk "$(xcrun --show-sdk-path)" \
+    -target "${SWIFT_TARGET:-arm64-apple-macosx12.0}" \
+    -o "$OUT/Contents/MacOS/MacStatP" "$ROOT/packaging/Launcher.swift"
+else
+  cat > "$OUT/Contents/MacOS/MacStatP" <<'STUB'
 #!/bin/sh
-# Resolve the bundle, then hand over to the Python entry point. The
-# executable path is exported so the settings page can write a launch
-# agent that points back at this bundle.
 DIR="$(cd "$(dirname "$0")/../Resources" && pwd)"
 MACSTATP_EXE="$(cd "$(dirname "$0")" && pwd)/MacStatP"
 export MACSTATP_EXE
 exec /usr/bin/python3 "$DIR/launch.py" "$@"
 STUB
+fi
 chmod +x "$OUT/Contents/MacOS/MacStatP"
 
 # Ad-hoc signature: unsigned bundles get harsher treatment from Gatekeeper.

@@ -1,7 +1,7 @@
 Prebuilt MacStatP apps.
 
-built from: 0f221ab
-built on:   2026-08-26 21:58 UTC
+built from: 4c63c7f
+built on:   2026-08-26 22:07 UTC
 menu bar:   arm64 (Apple Silicon)
 
 These are a convenience, not the source of truth. If you have changed

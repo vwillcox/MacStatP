@@ -39,7 +39,9 @@ Drag both apps onto the Applications folder in the window, then
 
 That right-click is needed exactly once. These apps are signed ad-hoc
 rather than with a paid Apple Developer certificate, so macOS does not
-recognise the signature and refuses a plain double-click. If it still
+recognise the signature and refuses a plain double-click. See
+[signing a release](TECHINFO.md#signing-a-release-so-others-can-just-open-it)
+if you want to hand this to other people without that step. If it still
 refuses:
 
 ```bash

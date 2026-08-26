@@ -208,7 +208,8 @@ device/   main.py          render loop on the board, and the mode switch
           link.py          newline-delimited JSON over USB serial
           storage.py       SD card: settings, history, error log
           buddy_mode.py    glue for the desk pet (installed separately)
-packaging/launch.py        entry point inside the agent .app bundle
+packaging/Launcher.swift   the agent bundle's main executable
+          launch.py        the Python entry point it hands over to
           Info.plist       agent bundle metadata
           MenuBar.swift    the menu bar item, compiled at build time
           Control-Info.plist  its bundle metadata
@@ -222,6 +223,7 @@ tools/    deploy.sh        copy the dashboard to the board
           build_app.sh     assemble the .app bundles
           make_dist.sh     rebuild and refresh dist/
           make_dmg.sh      build a disk image of both apps
+          sign_release.sh  sign, notarise and staple that image
           make_icon.py     render the app icon from the panel's own motif
           recover.sh       reflash a board stuck in BOOTSEL
           capture.py       screenshot the board's real framebuffer over USB
@@ -310,6 +312,54 @@ refuses a plain double-click. Right-click and Open clears it for that
 app, which is why the note inside the image says so rather than leaving
 someone to work it out. Notarising properly needs a paid Apple developer
 account.
+
+### Signing a release, so others can just open it
+
+Ad-hoc signing is what you get for free, and it is why a downloaded image
+needs right-click > Open. Removing that step needs a paid **Apple
+Developer Program** membership (about £79 / $99 a year) — there is no
+free route. Gatekeeper accepts exactly one identity for apps distributed
+outside the App Store: **Developer ID Application**.
+
+`tools/sign_release.sh` does the whole pipeline once you have one:
+
+```bash
+# once
+xcrun notarytool store-credentials macstatp \
+  --apple-id you@example.com --team-id ABCDE12345 \
+  --password xxxx-xxxx-xxxx-xxxx      # app-specific, from appleid.apple.com
+
+# each release
+security find-identity -v -p codesigning          # copy the full name
+IDENTITY="Developer ID Application: Your Name (ABCDE12345)" \
+  tools/sign_release.sh
+```
+
+It signs both apps with the hardened runtime and a secure timestamp,
+builds the image, signs that too, submits it to Apple's notary service,
+waits, and staples the ticket so it validates offline. `notarytool` and
+`stapler` ship with the command line tools, so full Xcode is not needed.
+
+**One thing had to change to make this possible at all.** The agent's
+main executable used to be a `/bin/sh` stub that ran Python. Notarisation
+requires a bundle's main executable to be a Mach-O binary and rejects a
+script however it is signed, so `packaging/Launcher.swift` replaced it —
+about twenty lines that set `MACSTATP_EXE` and `execv` into
+`/usr/bin/python3`. `execv` rather than spawn, so no extra process hangs
+around and launchd keeps watching the one doing the work. Both bundles
+are now real binaries.
+
+The Python inside the bundle is not a problem: it is data to Apple's own
+signed `python3`, which runs as a separate process and is unaffected by
+this app's hardened runtime.
+
+What is verified here and what is not: the bundles are Mach-O, ad-hoc
+signed and pass `codesign --verify` after a round trip through the disk
+image, and `spctl` currently reports "rejected — no usable signature",
+which is exactly what an unsigned image should say. The notarisation
+steps themselves are written from Apple's documented process and have
+**not** been run, because there is no certificate on this machine to run
+them with.
 
 ### Committed binaries
 

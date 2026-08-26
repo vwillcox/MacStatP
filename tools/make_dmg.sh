@@ -13,7 +13,11 @@ VOL="MacStatP"
 DMG="$ROOT/build/MacStatP-$VERSION.dmg"
 STAGE="$ROOT/build/dmg-stage"
 
-"$HERE/build_app.sh"
+# sign_release.sh signs the apps first and then asks for an image, so it
+# sets SKIP_BUILD to stop the rebuild throwing those signatures away.
+if [[ -z "${SKIP_BUILD:-}" ]]; then
+  "$HERE/build_app.sh"
+fi
 
 rm -rf "$STAGE" "$DMG"
 mkdir -p "$STAGE"
