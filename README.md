@@ -52,8 +52,35 @@ If it stops with a permissions error, `~/Library/LaunchAgents` is owned by
 root on your machine. The script prints the one `sudo chown` command that
 fixes it; run that and try again.
 
-**3. Open the settings** at **http://127.0.0.1:8765/** — or just open
-MacStatP from Finder, which brings the same page up.
+**3. Open the settings** at **http://127.0.0.1:8765/** — or use the menu
+bar item, below.
+
+## The menu bar item
+
+`tools/install_app.sh` also installs **MacStatP Control**, which puts a
+small gauge icon in the menu bar. The agent itself runs in the background
+with no interface, so this is where you reach it:
+
+| Menu | |
+|---|---|
+| **Open Settings…** | The configuration page |
+| **Restart Agent** | Restarts the background agent |
+| **Stop Agent** / **Start Agent** | Whichever applies |
+| **Show Log** | Opens `agent.log` |
+| **Show in Dock** | Adds a Dock icon as well as the menu bar item |
+| **Open at Login** | Brings the menu bar item back after a restart |
+| **Quit** | Closes the menu bar item; the agent keeps running |
+
+The top of the menu shows what's happening — whether the agent is
+running, whether the board is connected, and how many frames have been
+sent.
+
+It starts in the menu bar. **Show in Dock** adds a Dock icon too, if you'd
+rather have it there; it's the same process either way. Turn **Open at
+Login** on if you want the icon back automatically after a reboot —
+the display agent itself already starts on its own.
+
+Launch it any time from `/Applications/MacStatP Control.app`.
 
 ## Using it
 
@@ -166,7 +193,7 @@ actually applied, and the app logs it. Look for `board applied` in
 ## Uninstall
 
 ```bash
-tools/install_app.sh --uninstall      # the Mac app and its login item
+tools/install_app.sh --uninstall      # the agent, the menu bar item, login items
 tools/install_buddy.sh --uninstall    # the desk pet, if you installed it
 ```
 

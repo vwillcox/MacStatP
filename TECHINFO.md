@@ -204,8 +204,11 @@ device/   main.py          render loop on the board, and the mode switch
           link.py          newline-delimited JSON over USB serial
           storage.py       SD card: settings, history, error log
           buddy_mode.py    glue for the desk pet (installed separately)
-packaging/launch.py        entry point inside the .app bundle
-          Info.plist       bundle metadata
+packaging/launch.py        entry point inside the agent .app bundle
+          Info.plist       agent bundle metadata
+          MenuBar.swift    the menu bar item, compiled at build time
+          Control-Info.plist  its bundle metadata
+          control.py       scripted fallback where Swift is unavailable
 tools/    deploy.sh        copy the dashboard to the board
           install_app.sh   build and install MacStatP.app
           install_buddy.sh install or remove the optional desk pet
@@ -224,6 +227,34 @@ deliberately outside the checkout. The launch agent once pointed at a copy
 of the repo that had been moved to another disk and simply sat there
 failing to start; nothing needed at runtime should live at an address that
 can move.
+
+## The menu bar item
+
+`MacStatP Control` is a separate bundle from the agent, and deliberately
+so: the agent is a long-running background process, and giving it a user
+interface would mean running an NSApplication event loop alongside the
+frame loop for no good reason. Two processes, each doing one thing.
+
+It's written in Swift because a menu bar item needs a real
+`NSStatusItem`, and compiling it means nothing has to be installed
+alongside — the system Python has no PyObjC. `tools/build_app.sh`
+compiles it with the CommandLineTools SDK.
+
+Where `swiftc` isn't available the build falls back to
+`packaging/control.py`, which uses `osascript` for a dialog and needs a
+Dock icon rather than a menu bar item. It can do the same things, less
+elegantly.
+
+`LSUIElement` is true in its Info.plist, so it starts in the menu bar.
+"Show in Dock" calls `setActivationPolicy(.regular)` at runtime, which
+adds the Dock icon without restarting. The preference lives in
+`UserDefaults` rather than the shared config file: it belongs to the
+control app, and putting it in the config would mean the settings page's
+schema had to carry a key it has no business knowing about.
+
+Restarting the agent uses `launchctl kickstart -k`, which is atomic.
+Doing it as bootout-then-bootstrap races with launchd letting go of the
+label; that path is only the fallback.
 
 ## Recovering a wedged board
 

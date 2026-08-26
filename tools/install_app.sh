@@ -19,7 +19,9 @@ stop_agent() {
 if [[ "${1:-}" == "--uninstall" ]]; then
   stop_agent
   rm -f "$PLIST"
-  rm -rf "/Applications/MacStatP.app" "$HOME/Applications/MacStatP.app"
+  rm -rf "/Applications/MacStatP.app" "$HOME/Applications/MacStatP.app" \
+         "/Applications/MacStatP Control.app" \
+         "$HOME/Applications/MacStatP Control.app"
   echo "removed MacStatP (settings kept in ~/Library/Application Support/MacStatP)"
   exit 0
 fi
@@ -40,10 +42,12 @@ mkdir -p "$DEST" "$LOGDIR"
 # Stop the running copy before replacing the bundle it is executing from.
 stop_agent
 sleep 1
-rm -rf "$DEST/MacStatP.app"
+rm -rf "$DEST/MacStatP.app" "$DEST/MacStatP Control.app"
 cp -R "$ROOT/build/MacStatP.app" "$DEST/"
+cp -R "$ROOT/build/MacStatP Control.app" "$DEST/"
 APP="$DEST/MacStatP.app/Contents/MacOS/MacStatP"
 echo "installed to $DEST/MacStatP.app"
+echo "installed to $DEST/MacStatP Control.app"
 
 cat > "$PLIST" <<PLEOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -74,5 +78,6 @@ except Exception: print(8765)
 echo
 echo "MacStatP is installed and will start at login."
 echo "  settings:  http://127.0.0.1:$PORT/"
+echo "  control:   $DEST/MacStatP Control.app — drag it to the Dock"
 echo "  logs:      $LOGDIR/agent.log"
 echo "  uninstall: tools/install_app.sh --uninstall"

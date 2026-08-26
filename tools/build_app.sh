@@ -40,4 +40,39 @@ chmod +x "$OUT/Contents/MacOS/MacStatP"
 codesign --force --sign - "$OUT" >/dev/null 2>&1 \
   && echo "signed (ad-hoc)" || echo "codesign unavailable, continuing"
 
+# ── the Dock companion ───────────────────────────────────────────────
+# The agent has no Dock icon by design; this is the thing you click.
+CTL="$ROOT/build/MacStatP Control.app"
+rm -rf "$CTL"
+mkdir -p "$CTL/Contents/MacOS" "$CTL/Contents/Resources/host"
+
+cp "$ROOT/build/AppIcon.icns" "$CTL/Contents/Resources/AppIcon.icns"
+sed "s/__VERSION__/$VERSION/g" "$ROOT/packaging/Control-Info.plist" \
+  > "$CTL/Contents/Info.plist"
+
+# A menu bar item needs a real NSStatusItem, so this one is compiled.
+# Where Swift isn't available, fall back to the scripted version: it can
+# only manage a Dock icon and a dialog, but it needs nothing installed.
+if command -v swiftc >/dev/null 2>&1; then
+  swiftc -O -sdk "$(xcrun --show-sdk-path)" \
+    -target arm64-apple-macosx12.0 \
+    -o "$CTL/Contents/MacOS/MacStatP Control" \
+    "$ROOT/packaging/MenuBar.swift"
+  echo "  control: menu bar (compiled)"
+else
+  cp "$ROOT/host/config.py" "$CTL/Contents/Resources/host/"
+  cp "$ROOT/packaging/control.py" "$CTL/Contents/Resources/"
+  cat > "$CTL/Contents/MacOS/MacStatP Control" <<'CSTUB'
+#!/bin/sh
+DIR="$(cd "$(dirname "$0")/../Resources" && pwd)"
+exec /usr/bin/python3 "$DIR/control.py" "$@"
+CSTUB
+  # Without Swift there is no menu bar item, so it needs a Dock icon.
+  /usr/bin/plutil -replace LSUIElement -bool false "$CTL/Contents/Info.plist"
+  echo "  control: Dock dialog (no swiftc found)"
+fi
+chmod +x "$CTL/Contents/MacOS/MacStatP Control"
+codesign --force --sign - "$CTL" >/dev/null 2>&1 || true
+
 echo "built $OUT  (version $VERSION)"
+echo "built $CTL"
