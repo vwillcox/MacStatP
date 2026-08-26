@@ -9,7 +9,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$HERE")"
-FW_VERSION="v1.0.0"
+FW_VERSION="v2.0.0"
 FW_NAME="presto-${FW_VERSION}-micropython-with-filesystem.uf2"
 FW_URL="https://github.com/pimoroni/presto/releases/download/${FW_VERSION}/${FW_NAME}"
 UF2="${1:-$ROOT/firmware/$FW_NAME}"

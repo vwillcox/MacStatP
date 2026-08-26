@@ -24,7 +24,7 @@ The board talks back over its stdout, which the agent is already draining:
 |---|---|
 | `#V:` | A panel was opened or closed, so gather (or stop gathering) process detail |
 | `#C:` | Settings the board actually applied |
-| `#I:` | What this board has installed — currently whether the desk pet is present |
+| `#I:` | What this board has and can do: whether the desk pet is installed, and whether the firmware can rotate |
 | `#B:` | The desk pet levelled up |
 
 `#C:` exists because a setting that silently fails to apply is very hard to
@@ -40,7 +40,8 @@ Streaming rendered pixels from the Mac was built and measured, and lost:
 | USB serial throughput | 237 KB/s |
 | Panel `update()` (DMA to screen) | 23.5 ms → ~42 fps ceiling |
 | On-device render, 200 MHz stock | 166 ms → 6.0 fps |
-| On-device render, 264 MHz overclock | 138 ms → **7.2 fps** |
+| On-device render, 264 MHz overclock | 138 ms → 7.2 fps |
+| Same, on firmware v2.0.0 (MicroPython 1.29) | 124 ms → **8.1 fps** |
 | Full 480×480 RGB565 frame | 460,800 B → 1.9 s |
 
 Frames only get small if the artwork is flat-shaded: a delta-encoded frame
@@ -60,6 +61,29 @@ The RP2350 is overclocked from its stock 200 MHz to 264 MHz in
 proportional gain. If Bluetooth misbehaves with the desk pet installed,
 put `CLOCK_HZ` back to `200_000_000` and compare before blaming the
 bridge — the radio is driven over PIO SPI.
+
+## Firmware
+
+Built against Pimoroni's Presto firmware. v2.0.0 moved from MicroPython
+1.26 to 1.29, which is worth having: the same render dropped from 138 ms
+to 124 ms, about 11% for free. It also fixed a PIO stall in
+`start_frame_xfer` that could leave the panel blank, and made the FT6236
+touch controller survive transient I2C failures instead of raising —
+both of which this project was carrying its own defences against.
+
+Two things to know if you are on an older build:
+
+- **Rotation** (`rotate=ROTATE_180`) arrived in v2.0.0. `device/main.py`
+  imports it defensively and falls back to no rotation, so the code runs
+  unchanged on v1.0.0; the settings page disables the option and says
+  why.
+- `tools/recover.sh` fetches v2.0.0. Change `FW_VERSION` in it to flash
+  something else.
+
+`@micropython.native` is worth a note: `hasattr(micropython, "native")`
+is False on 1.29, which looks alarming, but the decorator is handled by
+the compiler rather than resolved at runtime and still works. Test it by
+compiling something, not by asking the module.
 
 ## Collecting the metrics
 

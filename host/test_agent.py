@@ -182,7 +182,12 @@ def test_primes_rates_on_reconnect():
     # One throwaway sample to re-prime the deltas, one that gets sent. The
     # first frame after a nine-hour gap must not be a nine-hour average.
     check("discards one sample on connect", col.samples == 2, col.samples)
-    check("sends only the second", len(port.writes) == 1, port.writes)
+    # The hello asking what the board has is a control message, not a
+    # frame, so count frames rather than writes.
+    frames = [w for w in port.writes if b'"cmd"' not in w]
+    check("sends only the second", len(frames) == 1, port.writes)
+    check("and asks the board what it has", any(
+        b'"cmd":"hello"' in w for w in port.writes), port.writes)
 
 
 def test_survives_a_bad_sample():

@@ -158,7 +158,8 @@ def device_config(cfg):
     return {"b": round(float(cfg["brightness"]), 2),
             "bits": 1 if cfg["net_bits"] else 0,
             "p": ",".join(cfg["panels"]),
-            "pet": 1 if cfg["buddy"] else 0}
+            "pet": 1 if cfg["buddy"] else 0,
+            "rot": int(cfg["rotate"])}
 
 
 def main():
@@ -283,6 +284,13 @@ def stream(args, col, serial, cfgw, status, limit=None):
                 lost_at = None
                 print("connected to %s%s" % (port, gap), flush=True)
                 status.set(connected=True, port=port, last_error="")
+                # Ask what this board has rather than waiting for it to
+                # volunteer the next time the link drops.
+                try:
+                    ser.write(b'{"cmd":"hello"}\n')
+                    ser.flush()
+                except (OSError, IOError):
+                    pass
                 time.sleep(0.5)
                 # Rates come from the delta between two samples. After an
                 # outage the previous one is however old the outage was, so
@@ -338,7 +346,8 @@ def stream(args, col, serial, cfgw, status, limit=None):
                         info = line.split(INFO_TAG, 1)[1].strip().decode(
                             "ascii", "ignore")
                         status.set(board_info=info,
-                                   buddy_installed="pet=1" in info)
+                                   buddy_installed="pet=1" in info,
+                                   can_rotate="canrot=1" in info)
                         print("board reports %s" % info, flush=True)
                     if CFG_TAG in line:
                         print("board applied %s" % line.split(

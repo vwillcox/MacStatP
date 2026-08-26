@@ -33,6 +33,11 @@ except Exception as _e:      # fall back to the stock clock rather than fail
 
 from presto import Presto  # noqa: E402  (must follow the clock change)
 
+try:                        # firmware v2.0.0 and later
+    from presto import ROTATE_180
+except ImportError:         # older builds simply cannot rotate
+    ROTATE_180 = None
+
 import dashboard
 import storage
 import theme
@@ -121,7 +126,18 @@ def start_buddy(presto, display, pens, store, enabled):
 
 async def main():
     print("Status display: starting")
-    presto = Presto(full_res=True)
+
+    # The card is read before the panel is built: rotation is fixed at
+    # construction, so the setting has to be known first.
+    store = storage.Storage()
+    rotate = int(store.config.get("rotate", 0))
+    if rotate == 180 and ROTATE_180 is not None:
+        presto = Presto(full_res=True, rotate=ROTATE_180)
+    else:
+        if rotate == 180:
+            store.log("rotation needs firmware v2.0.0 or later")
+            rotate = 0
+        presto = Presto(full_res=True)
     d = Display(presto)
     # Owning the framebuffer lets the board screenshot itself on request,
     # which is how the layout gets verified without looking at the panel.
@@ -129,7 +145,6 @@ async def main():
     d.set_framebuffer(fb)
     pens = theme.Pens(d)
 
-    store = storage.Storage()
     db = dashboard.Dashboard(d, pens)
 
     db.splash("MAC STATUS", ["STARTING UP"])
@@ -160,7 +175,8 @@ async def main():
     installed = buddy_installed()
     # Tell the host what is actually on this board, so the settings page
     # can offer the toggle only when there is something to toggle.
-    print("%spet=%d,on=%d" % (INFO_TAG, installed, pet_on))
+    print("%spet=%d,on=%d,rot=%d,canrot=%d" % (
+        INFO_TAG, installed, pet_on, rotate, ROTATE_180 is not None))
 
     buddy = start_buddy(presto, d, pens, store, pet_on and installed)
     mode = DASH
@@ -184,10 +200,16 @@ async def main():
     while True:
         incoming = link.read()
         shot = False
+        say_info = False
         if incoming:
             cmd = incoming.get("cmd")
             if cmd == "shot":
                 shot = True
+            elif cmd == "hello":
+                # The agent asks on connect. Waiting for the link to drop
+                # first meant a quick agent restart left the settings page
+                # with nothing to go on.
+                say_info = True
             elif cmd == "unshot":
                 # Drop the previous capture so a stale file can't be read
                 # back and mistaken for a fresh one.
@@ -222,6 +244,18 @@ async def main():
                         if keys != db.panels:
                             db.set_panels(keys)
                             changed = True
+
+                    turn = cfg.get("rot")
+                    if turn is not None and int(turn) != rotate:
+                        # Rotation is set when the panel is constructed,
+                        # so it cannot be changed in place.
+                        rotate = int(turn)
+                        store.config["rotate"] = rotate
+                        store.save_config()
+                        store.log("rotate %d, restarting" % rotate)
+                        print("%srot=%d restarting" % (INFO_TAG, rotate))
+                        time.sleep(0.4)
+                        machine.reset()
 
                     pet = cfg.get("pet")
                     if pet is not None and bool(pet) != pet_on:
@@ -345,6 +379,10 @@ async def main():
         if drew:
             d.update()
 
+        if say_info:
+            print("%spet=%d,on=%d,rot=%d,canrot=%d" % (
+                INFO_TAG, installed, pet_on, rotate, ROTATE_180 is not None))
+
         if shot and store.available:
             try:
                 store.log("screenshot %d bytes" % storage.screenshot(fb))
@@ -360,7 +398,9 @@ async def main():
                 # repeat what this board has whenever the link comes up.
                 # Otherwise the settings page never learns whether there
                 # is a pet here to offer.
-                print("%spet=%d,on=%d" % (INFO_TAG, installed, pet_on))
+                print("%spet=%d,on=%d,rot=%d,canrot=%d" % (
+                    INFO_TAG, installed, pet_on, rotate,
+                    ROTATE_180 is not None))
             was_linked = linked
 
         now = time.time()

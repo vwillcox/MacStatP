@@ -70,7 +70,9 @@ def main():
     print("serving")
     code, state = get(base + "/api/state")
     check("state is served", code == 200)
-    check("carries the settings", state["config"]["hz"] == 6.0)
+    check("carries the settings",
+          state["config"]["hz"] == config.DEFAULTS["hz"],
+          state["config"]["hz"])
     check("carries the status", "connected" in state["status"])
 
     print("saving a setting")
@@ -138,6 +140,18 @@ def main():
     check("and says nothing until the board tells it",
           state["status"]["buddy_installed"] is None,
           state["status"]["buddy_installed"])
+
+    print("orientation")
+    code, body = post(base + "/api/config", {"rotate": 180})
+    check("180 accepted", code == 200 and config.load()["rotate"] == 180)
+    code, body = post(base + "/api/config", {"rotate": 90})
+    check("anything the firmware can't do falls back to 0",
+          body["config"]["rotate"] == 0, body["config"]["rotate"])
+    post(base + "/api/config", {"rotate": 0})
+    code, state = get(base + "/api/state")
+    check("page waits for the board before offering it",
+          state["status"]["can_rotate"] is None,
+          state["status"]["can_rotate"])
 
     print("bad input")
     code, body = post(base + "/api/config", {"hz": 9999})

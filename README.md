@@ -13,7 +13,10 @@ Tap a panel for a breakdown of what's actually using it.
 
 ## What you need
 
-- A **Pimoroni Presto** running the Pimoroni MicroPython build
+- A **Pimoroni Presto** running Pimoroni's MicroPython build.
+  [v2.0.0](https://github.com/pimoroni/presto/releases/tag/v2.0.0) or later
+  is recommended: it renders about 11% faster and adds screen rotation.
+  Earlier builds work, minus the rotation setting.
 - A **Mac** (Apple silicon or Intel), macOS 12 or newer
 - A **USB-C cable** between the two
 - [`mpremote`](https://docs.micropython.org/en/latest/reference/mpremote.html)
@@ -71,9 +74,20 @@ immediately — nothing needs restarting.
 | **Status** | Whether the board is connected, frames sent, sample time |
 | **Panels** | Which panels appear, and in what order |
 | **Connection** | Serial port, and how many updates a second to send |
-| **Display** | Brightness, bytes vs bits, how often detail refreshes |
+| **Display** | Brightness, orientation, bytes vs bits, detail refresh |
 | **Measure** | Which disk volume and which network interfaces to watch |
 | **App** | The desk pet switch, start at login, page port |
+
+### Orientation
+
+If the board is mounted upside down — which the USB-C socket often
+encourages — set **Orientation** to "Upside down" on the Display tab. The
+touchscreen follows, so taps still land where you expect. This needs
+firmware v2.0.0 or later; on older builds the page says so and leaves the
+option disabled.
+
+Changing it restarts the board, since the panel's orientation is fixed
+when it is created.
 
 ### Choosing panels
 

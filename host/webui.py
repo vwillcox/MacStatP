@@ -33,6 +33,7 @@ class Status:
         # settings page shouldn't claim either way.
         self.board_info = ""
         self.buddy_installed = None
+        self.can_rotate = None
 
     def snapshot(self):
         with self.lock:
@@ -46,6 +47,7 @@ class Status:
                 "sample_ms": round(self.sample_ms, 1),
                 "board_info": self.board_info,
                 "buddy_installed": self.buddy_installed,
+                "can_rotate": self.can_rotate,
             }
 
     def set(self, **kw):
@@ -186,6 +188,11 @@ max="1" step="0.05"><span id="bval" class="hint"></span></div>
 <div class="row"><label>Network units<span class="hint">Show throughput in
 bits instead of bytes</span></label>
 <input type="checkbox" id="net_bits" name="net_bits"></div>
+<div class="row"><label>Orientation<span class="hint" id="rothint">Which
+way up the board is mounted</span></label>
+<select id="rotate" name="rotate">
+<option value="0">Normal</option>
+<option value="180">Upside down</option></select></div>
 <div class="row"><label>Detail refresh<span class="hint">Seconds between
 process listings while a panel is open</span></label>
 <input type="number" id="detail_period" name="detail_period" min="0.25"
@@ -361,6 +368,13 @@ async function refresh(){
     '<div class="stat"><span>Panel open</span><span>'+(s.view||'dashboard')+'</span></div>'+
     (s.last_error?'<div class="stat"><span>Last error</span><span class="err">'+
       s.last_error+'</span></div>':'');
+  const rh=$('rothint'),rs=$('rotate');
+  if(s.can_rotate===false){
+    rh.textContent='Needs Presto firmware v2.0.0 or later.';rs.disabled=true;
+  }else{
+    rh.textContent='Which way up the board is mounted. Touch follows.';
+    rs.disabled=false;
+  }
   const hint=$('pethint'),box=$('buddy');
   if(s.buddy_installed===true){
     hint.textContent='Installed on the board.';box.disabled=false;
@@ -386,6 +400,7 @@ function fill(c,login){
   $('net_auto').checked=c.net_auto;$('web_port').value=c.web_port;
   $('login').checked=login;
   $('buddy').checked=c.buddy;
+  $('rotate').value=String(c.rotate);
   const on=c.panels||[];
   // Enabled first, in the stored order, then the rest: the list shows
   // the running order, and what is off sits below it.
@@ -408,6 +423,7 @@ $('f').addEventListener('submit',async e=>{
     net_wired:$('net_wired').value,brightness:+$('brightness').value,
     net_bits:$('net_bits').checked,detail_period:+$('detail_period').value,
     login:$('login').checked,buddy:$('buddy').checked,
+    rotate:+$('rotate').value,
     panels:currentEnabled()};
   const m=$('msg');
   try{

@@ -19,7 +19,7 @@ CONFIG_PATH = os.path.join(SUPPORT_DIR, "config.json")
 
 # Every key here is applied somewhere; there are no decorative settings.
 DEFAULTS = {
-    "hz": 6.0,              # frames per second sent to the board
+    "hz": 7.0,              # frames per second sent to the board
     "port": "",             # serial device, blank to auto-detect
     "web_port": 8765,       # port the configuration page listens on
     "disk_path": "/",       # which volume the DISK panel measures
@@ -31,11 +31,14 @@ DEFAULTS = {
     "detail_period": 1.0,   # seconds between process listings while open
     "panels": ["cpu", "gpu", "mem", "disk", "net"],   # which panels show
     "buddy": True,          # run the desk pet, when its bundle is installed
+    "rotate": 0,            # panel orientation: 0 or 180 (firmware v2.0.0+)
 }
 
 PANELS = ("cpu", "gpu", "mem", "disk", "net")
 
 # Bounds applied on load, so a hand-edited file cannot wedge the agent.
+ROTATIONS = (0, 180)
+
 LIMITS = {
     "hz": (0.2, 15.0),
     "web_port": (1024, 65535),
@@ -58,6 +61,15 @@ def coerce(raw):
         if key not in raw:
             continue
         val = raw[key]
+        if key == "rotate":
+            try:
+                val = int(val)
+            except (TypeError, ValueError):
+                continue
+            # Only the two the firmware offers; anything else would leave
+            # the board unable to build its panel.
+            cfg[key] = val if val in ROTATIONS else 0
+            continue
         if key == "panels":
             # The order here is the running order on the display, so it is
             # preserved rather than normalised. Unknown names are dropped:
