@@ -125,6 +125,20 @@ def main():
     check("page still fine with none selected", code == 200)
     post(base + "/api/config", {"panels": list(config.PANELS)})
 
+    print("desk pet")
+    code, body = post(base + "/api/config", {"buddy": False})
+    check("can be switched off", code == 200 and
+          config.load()["buddy"] is False)
+    code, body = post(base + "/api/config", {"buddy": True})
+    check("and back on", config.load()["buddy"] is True)
+    code, state = get(base + "/api/state")
+    check("page reports what the board has, not a guess",
+          "buddy_installed" in state["status"],
+          list(state["status"]))
+    check("and says nothing until the board tells it",
+          state["status"]["buddy_installed"] is None,
+          state["status"]["buddy_installed"])
+
     print("bad input")
     code, body = post(base + "/api/config", {"hz": 9999})
     check("out of range is clamped, not rejected",

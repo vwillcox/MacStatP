@@ -21,6 +21,9 @@ tools/deploy.sh --run     # put the dashboard on the board
 tools/install_app.sh      # build and install MacStatP.app
 ```
 
+That deploys the dashboard and nothing else. The desk pet is a separate,
+optional bundle — see below.
+
 That builds `MacStatP.app`, installs it to `/Applications`, and registers a
 launch agent so it starts at login and restarts itself if it stops. The app
 is a background agent — no Dock icon — and opening it from Finder just
@@ -152,41 +155,50 @@ the process listing, refreshing it about once a second: a listing is roughly
 ten times the size of the summary frame and costs ~25 ms to collect, so it
 is not worth carrying while nothing is looking at it.
 
-## The second face
+## The desk pet (optional)
 
-The board also runs
+The board can also run
 [BuddyPresto](https://github.com/vwillcox/BuddyPresto), a desk pet that
 talks to the Claude desktop app over BLE and lets permission prompts be
 answered from the touchscreen. It shares this project's display face and
 palette, so the two modes look like one device.
 
+It is entirely optional and completely separate from the dashboard.
+`tools/deploy.sh` never touches it; installing it is its own step:
+
 ```bash
 git clone https://github.com/vwillcox/BuddyPresto.git   # next to this one
-tools/deploy.sh --run
+tools/install_buddy.sh              # or BUDDY_SRC=/path tools/install_buddy.sh
+tools/install_buddy.sh --uninstall  # take it off again
 ```
 
-**Swipe down from the top edge** switches between them, either way, and the
-choice is remembered in the SD card config. The BLE bridge runs in both
-modes — the LEDs stay an ambient Claude status light while the dashboard is
-on screen — and a permission prompt brings the pet to the front by itself,
-dropping back to the dashboard once it's answered.
+Whether an installed pet actually runs is the **Desk pet** switch on the
+App tab. The page only offers it when the board reports the bundle is
+there — the board announces what it has at boot and whenever the link
+comes up, so the page is never guessing.
 
-The pet also prints a `#B:` line on its stdout when it levels up. The agent
-is already draining that stream for the `#V:` panel tags, so it picks the
+Switching it off restarts the board. There is no way to stop the pet's
+BLE tasks once they are running, and hiding the pet while the radio kept
+advertising would make the setting a lie; a restart takes a few seconds
+and the dashboard comes straight back.
+
+With the pet running, **swipe down from the top edge** switches between
+the two faces, either way, and the choice is remembered on the SD card.
+The BLE bridge runs in both modes — the LEDs stay an ambient Claude
+status light while the dashboard is on screen — and a permission prompt
+brings the pet to the front by itself, dropping back to the dashboard
+once it's answered.
+
+The pet prints a `#B:` line on its stdout when it levels up. The agent is
+already draining that stream for the `#V:` panel tags, so it picks the
 announcement up, saves the figures and rebuilds the pet's trophy page in
 the background — which is the only way that page can be regenerated
 automatically, since the agent itself is holding the serial port a poller
 would need. Repeats that say nothing new are ignored. `BUDDY_REPO` points
 at the checkout; with it missing, nothing happens.
 
-`tools/deploy.sh` picks the package up from `../BuddyPresto/buddy`
-automatically; set `BUDDY_SRC` to point elsewhere, or `BUDDY_SRC=none` to
-deploy the dashboard on its own. With the package absent, `device/main.py`
-logs that and behaves exactly as it did before it existed — nothing here
-depends on the pet being installed.
-
-The one thing to watch: this project overclocks the RP2350 to 264 MHz and
-the radio is driven over PIO SPI. If BLE misbehaves, put `CLOCK_HZ` back to
+One thing to watch: this project overclocks the RP2350 to 264 MHz and the
+radio is driven over PIO SPI. If BLE misbehaves, put `CLOCK_HZ` back to
 `200_000_000` and compare before blaming the bridge.
 
 ## Layout
@@ -202,7 +214,7 @@ host/     agent.py      samples the Mac, sends one JSON line per frame
 packaging/launch.py     entry point inside the .app bundle
           Info.plist    bundle metadata
 device/   main.py       render loop on the board, and the mode switch
-          buddy_mode.py glue for the BuddyPresto desk pet
+          buddy_mode.py glue for the desk pet (installed separately)
           dashboard.py  the panel layout
           widgets.py    cards, radial gauges, meters, sparklines
           font.py       renderer for the custom display face
@@ -217,6 +229,7 @@ tools/    deploy.sh     copy the device modules to the board
           recover.sh    reflash a board stuck in BOOTSEL
           build_app.sh  assemble MacStatP.app
           install_app.sh  install it and register the launch agent
+          install_buddy.sh install or remove the optional desk pet
           make_icon.py  render the app icon from the panel's own motif
 ```
 

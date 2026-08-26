@@ -29,6 +29,10 @@ class Status:
         self.last_error = ""
         self.view = None
         self.sample_ms = 0.0
+        # The board tells us what it has installed; until it does, the
+        # settings page shouldn't claim either way.
+        self.board_info = ""
+        self.buddy_installed = None
 
     def snapshot(self):
         with self.lock:
@@ -40,6 +44,8 @@ class Status:
                 "last_error": self.last_error,
                 "view": self.view,
                 "sample_ms": round(self.sample_ms, 1),
+                "board_info": self.board_info,
+                "buddy_installed": self.buddy_installed,
             }
 
     def set(self, **kw):
@@ -198,6 +204,15 @@ panel shows</span></label><select id="disk_path" name="disk_path"></select>
 <select id="net_wired" name="net_wired"></select></div>
 </div>
 
+<div class="card" data-tab="app"><h2>DESK PET</h2>
+<div class="row"><label>Run the desk pet<span class="hint" id="pethint">
+Checking what the board has installed&hellip;</span></label>
+<input type="checkbox" id="buddy" name="buddy"></div>
+<p class="note">The pet is a separate bundle
+(<code>tools/install_buddy.sh</code>). Switching it off restarts the
+board: its Bluetooth tasks cannot be stopped any other way, and leaving
+the radio advertising while the setting says off would be a lie.</p></div>
+
 <div class="card" data-tab="app"><h2>APPLICATION</h2>
 <div class="row"><label>Start at login<span class="hint">Runs in the
 background from /Applications</span></label>
@@ -346,6 +361,17 @@ async function refresh(){
     '<div class="stat"><span>Panel open</span><span>'+(s.view||'dashboard')+'</span></div>'+
     (s.last_error?'<div class="stat"><span>Last error</span><span class="err">'+
       s.last_error+'</span></div>':'');
+  const hint=$('pethint'),box=$('buddy');
+  if(s.buddy_installed===true){
+    hint.textContent='Installed on the board.';box.disabled=false;
+  }else if(s.buddy_installed===false){
+    hint.textContent='Not installed — run tools/install_buddy.sh first.';
+    box.disabled=true;
+  }else{
+    hint.textContent=s.connected?'Waiting for the board to report\u2026'
+      :'Connect the board to see whether it is installed.';
+    box.disabled=true;
+  }
   if(dirty)return;
   fill(d.config,d.login);
 }
@@ -359,6 +385,7 @@ function fill(c,login){
   $('net_bits').checked=c.net_bits;$('detail_period').value=c.detail_period;
   $('net_auto').checked=c.net_auto;$('web_port').value=c.web_port;
   $('login').checked=login;
+  $('buddy').checked=c.buddy;
   const on=c.panels||[];
   // Enabled first, in the stored order, then the rest: the list shows
   // the running order, and what is off sits below it.
@@ -380,7 +407,7 @@ $('f').addEventListener('submit',async e=>{
     net_auto:$('net_auto').checked,net_wifi:$('net_wifi').value,
     net_wired:$('net_wired').value,brightness:+$('brightness').value,
     net_bits:$('net_bits').checked,detail_period:+$('detail_period').value,
-    login:$('login').checked,
+    login:$('login').checked,buddy:$('buddy').checked,
     panels:currentEnabled()};
   const m=$('msg');
   try{

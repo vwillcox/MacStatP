@@ -17,6 +17,7 @@ a permission prompt can pull it to the front on its own.
 
 import asyncio
 import gc
+import os
 import time
 
 import machine
@@ -41,6 +42,7 @@ SAVE_EVERY = 30      # seconds between history writes to the SD card
 IDLE_LIMIT = 5       # seconds without data before the link reads as dead
 HOLD_MS = 700        # press longer than this is a hold, not a tap
 VIEW_TAG = "#V:"     # prefix the agent watches for on our stdout
+INFO_TAG = "#I:"     # what this board has installed
 CFG_TAG = "#C:"      # settings the board has actually applied
 
 DASH, BUDDY = 0, 1   # the two faces
@@ -79,12 +81,27 @@ def cycle_brightness(level):
     return 0.25
 
 
-def start_buddy(presto, display, pens, store):
-    """Bring up the desk pet, if its package is on the board.
+def buddy_installed():
+    """Is the desk pet's package on the board at all?"""
+    try:
+        os.stat("/buddy_mode.py")
+        os.stat("/buddy")
+        return True
+    except OSError:
+        return False
 
-    A missing or broken buddy must never cost us the dashboard, so this
-    swallows anything that goes wrong and reports it instead.
+
+def start_buddy(presto, display, pens, store, enabled):
+    """Bring up the desk pet, if it is installed and switched on.
+
+    The pet is optional in two independent ways: its package may not be
+    installed, and an installed one can be switched off from the settings
+    page. A missing or broken buddy must never cost us the dashboard, so
+    this swallows anything that goes wrong and reports it instead.
     """
+    if not enabled:
+        store.log("buddy: switched off in settings")
+        return None
     try:
         from buddy_mode import BuddyMode
     except ImportError:
@@ -137,7 +154,15 @@ async def main():
     except Exception:
         touch = None
 
-    buddy = start_buddy(presto, d, pens, store)
+    # The board has to know this before the agent connects, so it is kept
+    # on the card and only changed when the host says otherwise.
+    pet_on = bool(store.config.get("pet", True))
+    installed = buddy_installed()
+    # Tell the host what is actually on this board, so the settings page
+    # can offer the toggle only when there is something to toggle.
+    print("%spet=%d,on=%d" % (INFO_TAG, installed, pet_on))
+
+    buddy = start_buddy(presto, d, pens, store, pet_on and installed)
     mode = DASH
     if buddy and store.config.get("mode") == "buddy":
         mode = BUDDY
@@ -167,8 +192,7 @@ async def main():
                 # Drop the previous capture so a stale file can't be read
                 # back and mistaken for a fresh one.
                 try:
-                    import os as _os
-                    _os.remove(storage.SHOT)
+                    os.remove(storage.SHOT)
                 except Exception:
                     pass
             else:
@@ -198,6 +222,22 @@ async def main():
                         if keys != db.panels:
                             db.set_panels(keys)
                             changed = True
+
+                    pet = cfg.get("pet")
+                    if pet is not None and bool(pet) != pet_on:
+                        # There is no way to stop the pet's BLE tasks once
+                        # they are running, so switching it off has to
+                        # actually restart the board rather than just
+                        # hiding it and leaving the radio advertising.
+                        pet_on = bool(pet)
+                        store.config["pet"] = pet_on
+                        store.save_config()
+                        store.log("buddy: %s, restarting" %
+                                  ("enabled" if pet_on else "disabled"))
+                        print("%spet=%d,on=%d restarting" % (
+                            INFO_TAG, installed, pet_on))
+                        time.sleep(0.4)      # let that reach the host
+                        machine.reset()
 
                     bits = bool(cfg.get("bits", 0))
                     if bits != dashboard.NET_BITS:
@@ -315,6 +355,12 @@ async def main():
 
         if was_linked != linked:
             store.log("link %s" % ("up" if linked else "down"))
+            if linked:
+                # The agent may have started long after we booted, so
+                # repeat what this board has whenever the link comes up.
+                # Otherwise the settings page never learns whether there
+                # is a pet here to offer.
+                print("%spet=%d,on=%d" % (INFO_TAG, installed, pet_on))
             was_linked = linked
 
         now = time.time()

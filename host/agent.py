@@ -39,6 +39,7 @@ DETAIL_PERIOD = 1.0      # seconds between process listings while open
 # the serial port, and we are holding it.
 LEVEL_TAG = b"#B:"
 CFG_TAG = b"#C:"
+INFO_TAG = b"#I:"   # what the board reports it has installed
 BUDDY_REPO = os.environ.get(
     "BUDDY_REPO", os.path.join(HERE, "..", "..", "BuddyPresto"))
 
@@ -156,7 +157,8 @@ def device_config(cfg):
     """The slice of settings the board itself acts on."""
     return {"b": round(float(cfg["brightness"]), 2),
             "bits": 1 if cfg["net_bits"] else 0,
-            "p": ",".join(cfg["panels"])}
+            "p": ",".join(cfg["panels"]),
+            "pet": 1 if cfg["buddy"] else 0}
 
 
 def main():
@@ -319,7 +321,7 @@ def stream(args, col, serial, cfgw, status, limit=None):
             except Exception:
                 chatter = b""
             if (VIEW_TAG in chatter or LEVEL_TAG in chatter
-                    or CFG_TAG in chatter):
+                    or CFG_TAG in chatter or INFO_TAG in chatter):
                 lines = chatter.split(b"\n")
                 # A level announcement can be long; keep enough of a
                 # partial line to finish it on the next read.
@@ -332,6 +334,12 @@ def stream(args, col, serial, cfgw, status, limit=None):
                         if want != view:
                             view, detail, detail_at = want, None, 0.0
                             status.set(view=view)
+                    if INFO_TAG in line:
+                        info = line.split(INFO_TAG, 1)[1].strip().decode(
+                            "ascii", "ignore")
+                        status.set(board_info=info,
+                                   buddy_installed="pet=1" in info)
+                        print("board reports %s" % info, flush=True)
                     if CFG_TAG in line:
                         print("board applied %s" % line.split(
                             CFG_TAG, 1)[1].strip().decode("ascii", "ignore"),

@@ -30,6 +30,7 @@ DEFAULTS = {
     "net_bits": False,      # show network rates in bits rather than bytes
     "detail_period": 1.0,   # seconds between process listings while open
     "panels": ["cpu", "gpu", "mem", "disk", "net"],   # which panels show
+    "buddy": True,          # run the desk pet, when its bundle is installed
 }
 
 PANELS = ("cpu", "gpu", "mem", "disk", "net")
