@@ -73,6 +73,30 @@ def fmt_bytes(n, places=1):
     return "%dB" % int(n)
 
 
+NET_BITS = False   # set from the host's settings
+
+
+def set_net_units(bits):
+    global NET_BITS
+    NET_BITS = bool(bits)
+
+
+def fmt_net_rate(bps):
+    """Network throughput, in bits or bytes depending on the setting."""
+    if not NET_BITS:
+        return fmt_rate(bps)
+    # BPS rather than BIT/S: the long form is wide enough to collide with
+    # the next column in the network panel.
+    b = float(bps or 0) * 8.0
+    if b >= 1000.0 ** 3:
+        return "%.1f" % (b / 1000.0 ** 3), "GBPS"
+    if b >= 1000.0 ** 2:
+        return "%.1f" % (b / 1000.0 ** 2), "MBPS"
+    if b >= 1000.0:
+        return "%.0f" % (b / 1000.0), "KBPS"
+    return "%d" % int(b), "BPS"
+
+
 def fmt_rate(bps):
     """Split a byte rate into (number, unit) so they can be styled apart."""
     b = float(bps or 0)
@@ -139,6 +163,17 @@ class Dashboard:
         if isinstance(links, dict):
             for dev, vals in links.items():
                 self.links[dev] = [float(v) for v in vals][-HISTORY:]
+
+    def invalidate(self):
+        """Force a full repaint.
+
+        The renderer skips anything whose text is unchanged, so a change
+        in formatting has to drop those caches or stale units would stay
+        on screen.
+        """
+        self._mode = None
+        self._lit = {}
+        self._last = {}
 
     # ── helpers ───────────────────────────────────────────────────────
     def _clr(self, x, y, w, h, colour=None):
@@ -323,7 +358,7 @@ class Dashboard:
                     (("rx", "\x11", theme.ACCENT["rx"]),
                      ("tx", "\x10", theme.ACCENT["tx"]))):
                 bx = x + 106 + j * 144
-                val, unit = fmt_rate(ln.get(key, 0))
+                val, unit = fmt_net_rate(ln.get(key, 0))
                 p.set(colour if up else theme.TRACK)
                 font.text(d, arrow, bx, ry + 5, 16)
                 p.set(theme.TEXT if up else theme.MUTED)
@@ -423,8 +458,8 @@ class Dashboard:
         if view == "mem":
             return "%s  PID %d" % (fmt_bytes(r.get("v")), r.get("p", 0))
         if view == "net":
-            iv, iu = fmt_rate(r.get("i", 0))
-            ov, ou = fmt_rate(r.get("o", 0))
+            iv, iu = fmt_net_rate(r.get("i", 0))
+            ov, ou = fmt_net_rate(r.get("o", 0))
             return "\x11%s%s  \x10%s%s" % (iv, iu, ov, ou)
         if view == "disk":
             return "%s OF %s  %.0f%%" % (fmt_bytes(r.get("u")),

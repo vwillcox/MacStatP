@@ -145,15 +145,24 @@ def capture_live(port, out_path, seconds=8):
 
     import serial
 
+    import agent
+    import config
     import macstats
 
     col = macstats.Collector()
+    cfg = config.load()
+    agent.apply_config(col, cfg)
     time.sleep(0.5)
 
     print("feeding %s for %ds..." % (port, seconds))
     with serial.Serial(port, 115200, timeout=0, write_timeout=3) as ser:
         for _ in range(seconds):
-            frame = json.dumps(col.sample(), separators=(",", ":")) + "\n"
+            # Carry the real settings, so a capture shows the display as
+            # it is actually configured rather than however the board was
+            # last left.
+            sample = col.sample()
+            sample["cfg"] = agent.device_config(cfg)
+            frame = json.dumps(sample, separators=(",", ":")) + "\n"
             ser.write(frame.encode())
             ser.flush()
             try:
@@ -161,6 +170,10 @@ def capture_live(port, out_path, seconds=8):
             except Exception:
                 pass
             time.sleep(1.0)
+        # Remove any previous capture first: reading a stale file back
+        # looks exactly like a successful capture, and once did.
+        ser.write(b'{"cmd":"unshot"}\n')
+        time.sleep(0.5)
         ser.write(b'{"cmd":"shot"}\n')
         ser.flush()
         time.sleep(4.0)

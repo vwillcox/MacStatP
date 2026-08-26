@@ -11,17 +11,62 @@ bar meters, per-core activity and per-interface network traffic.
 
 - A Pimoroni Presto (RP2350) running the Pimoroni MicroPython build
 - macOS, with the system Python 3
-- `pyserial` (`pip3 install --user pyserial`) and `mpremote` for deploying
+- `pyserial` (the installer adds it) and `mpremote` for deploying the board
 - `pillow` and `numpy`, only for the Mac-side preview renderer
 
+## Installing
+
 ```bash
-tools/deploy.sh --run    # copy the device modules and restart the board
+tools/deploy.sh --run     # put the dashboard on the board
+tools/install_app.sh      # build and install MacStatP.app
 ```
 
-## Running it
+That builds `MacStatP.app`, installs it to `/Applications`, and registers a
+launch agent so it starts at login and restarts itself if it stops. The app
+is a background agent — no Dock icon — and opening it from Finder just
+brings up its settings page.
 
 ```bash
-python3 host/agent.py
+tools/install_app.sh --uninstall
+```
+
+Settings live in `~/Library/Application Support/MacStatP/config.json`,
+deliberately outside the checkout: the launch agent once pointed at a copy
+of the repo that had been moved to another disk, and simply sat there
+failing to start. Nothing the app needs at runtime lives in the repo.
+
+## Settings
+
+The app serves a configuration page on the loopback interface only:
+
+**http://127.0.0.1:8765/**
+
+| Setting | Effect |
+|---|---|
+| Serial port | Pin the board's port, or auto-detect |
+| Update rate | Frames per second, up to the ~7 the board can draw |
+| Brightness | Panel backlight |
+| Network units | Bytes or bits — disk stays in bytes either way |
+| Detail refresh | How often process listings are re-gathered |
+| Disk volume | Which volume the DISK panel measures |
+| Interfaces | Auto-detect the Wi-Fi and wired links, or choose them |
+| Start at login | Adds or removes the launch agent |
+
+Changes apply without restarting anything: the agent notices the file
+changed and picks it up on the next frame. The board confirms what it
+actually applied on its serial line, which the agent logs as
+`board applied bits=0 b=0.85` — so a setting that did not take effect is
+visible rather than guesswork.
+
+There is no authentication, so the page binds to `127.0.0.1` and nothing
+else. It shows what the machine is running, which is not something to put
+on a network.
+
+## Running it by hand
+
+```bash
+python3 host/agent.py            # with the settings page
+python3 host/agent.py --no-web   # without it
 ```
 
 The board shows a standby card until the agent connects.
@@ -125,9 +170,13 @@ the radio is driven over PIO SPI. If BLE misbehaves, put `CLOCK_HZ` back to
 
 ```
 host/     agent.py      samples the Mac, sends one JSON line per frame
+          config.py     settings, stored outside the checkout
+          webui.py      the configuration page, loopback only
           test_agent.py tests for the link: unplug, replug, reconnect
           macstats.py   all the metric collection
           pilshim.py    PicoGraphics-shaped surface backed by Pillow
+packaging/launch.py     entry point inside the .app bundle
+          Info.plist    bundle metadata
 device/   main.py       render loop on the board, and the mode switch
           buddy_mode.py glue for the BuddyPresto desk pet
           dashboard.py  the panel layout
@@ -142,6 +191,9 @@ tools/    deploy.sh     copy the device modules to the board
           glyphs.py     font design source
           build_font.py pack glyphs.py into device/font_data.py
           recover.sh    reflash a board stuck in BOOTSEL
+          build_app.sh  assemble MacStatP.app
+          install_app.sh  install it and register the launch agent
+          make_icon.py  render the app icon from the panel's own motif
 ```
 
 ## The font

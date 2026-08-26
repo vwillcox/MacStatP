@@ -317,8 +317,26 @@ class _NetPicker:
     def __init__(self):
         self._picked = []
         self._at = 0.0
+        self.override = None    # (wifi_dev, wired_dev) from the settings
+
+    def set_override(self, wifi, wired):
+        """Pin the interfaces, or pass (None, None) to auto-detect."""
+        new = (wifi or "", wired or "") if (wifi or wired) else None
+        if new != self.override:
+            self.override = new
+            self._picked = []   # re-evaluate on the next sample
+            self._at = 0.0
 
     def pick(self, per):
+        if self.override is not None:
+            wifi, wired = self.override
+            picked = []
+            if wifi:
+                picked.append(("WI-FI", wifi))
+            if wired:
+                picked.append(("LAN", wired))
+            return picked
+
         now = time.monotonic()
         if self._picked and (now - self._at) < self.RECHECK:
             return self._picked
@@ -498,6 +516,27 @@ def volumes(n=6):
     return _LAST_VOLUMES
 
 
+def volume_mounts():
+    """Mount points worth offering as the DISK panel's target."""
+    out = _run(["df", "-k"], timeout=2)
+    seen = []
+    for line in out.splitlines()[1:]:
+        f = line.split()
+        if len(f) < 9:
+            continue
+        if not (f[0].startswith("/dev/") or f[0].startswith("//")):
+            continue
+        mount = " ".join(f[8:])
+        try:
+            if int(f[1]) * 1024 < MIN_VOLUME:
+                continue
+        except ValueError:
+            continue
+        seen.append({"mount": mount,
+                     "n": ascii_only(_volume_label(mount)).upper()[:24]})
+    return seen or [{"mount": "/", "n": "SYSTEM"}]
+
+
 def gpu_detail():
     """The individual GPU engine counters behind the summary figure."""
     out = _run(["ioreg", "-r", "-d", "1", "-w", "0", "-c", "IOAccelerator"])
@@ -534,6 +573,7 @@ class Collector:
         self.picker = _NetPicker()
         self.netprocs = _NetProcs()
         self._last_per = {}   # last usable interface counters
+        self.disk_path = "/"  # which volume the DISK panel measures
         self._if_rates = {}   # (device, direction) -> _Rate
         self._up = {}         # device -> last known link state
         self._up_at = 0.0
@@ -591,7 +631,7 @@ class Collector:
             # off the display entirely for one bad sample.
             per = self._last_per
         nr, nt = _totals(per)
-        cap = disk_capacity("/")
+        cap = disk_capacity(self.disk_path)
         mem = memory()
         g = gpu()
 

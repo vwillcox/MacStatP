@@ -22,7 +22,9 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+import config
 import macstats
+import webui
 
 BAUD = 115200   # ignored by USB CDC, but pyserial wants a value
 PATTERNS = ("/dev/cu.usbmodem*", "/dev/cu.usbserial*")
@@ -36,6 +38,7 @@ DETAIL_PERIOD = 1.0      # seconds between process listings while open
 # what makes it possible at all: the page generator would otherwise want
 # the serial port, and we are holding it.
 LEVEL_TAG = b"#B:"
+CFG_TAG = b"#C:"
 BUDDY_REPO = os.environ.get(
     "BUDDY_REPO", os.path.join(HERE, "..", "..", "BuddyPresto"))
 
@@ -140,28 +143,49 @@ def preview(path, scale=3):
     print("wrote", path)
 
 
+def apply_config(col, cfg):
+    """Push settings that live inside the collector."""
+    col.disk_path = cfg["disk_path"] or "/"
+    if cfg["net_auto"]:
+        col.picker.set_override(None, None)
+    else:
+        col.picker.set_override(cfg["net_wifi"], cfg["net_wired"])
+
+
+def device_config(cfg):
+    """The slice of settings the board itself acts on."""
+    return {"b": round(float(cfg["brightness"]), 2),
+            "bits": 1 if cfg["net_bits"] else 0}
+
+
 def main():
     ap = argparse.ArgumentParser(description="Mac -> Presto status feed")
-    ap.add_argument("--port", help="serial device (default: first usbmodem)")
-    ap.add_argument("--hz", type=float, default=6.0,
-                    help="frames per second to send (default 6; the board "
-                         "renders at ~7.2 fps overclocked to 264 MHz)")
+    # These default to None so a flag can be told apart from a stored
+    # setting: anything passed here wins for this run only.
+    ap.add_argument("--port", help="serial device (default: from settings)")
+    ap.add_argument("--hz", type=float, help="frames per second to send")
     ap.add_argument("--stdout", action="store_true",
                     help="print frames instead of writing to serial")
     ap.add_argument("--preview", help="render one frame to this PNG and exit")
     ap.add_argument("--scale", type=int, default=3,
                     help="supersampling for --preview only")
+    ap.add_argument("--no-browser", action="store_true",
+                    help="do not open the configuration page at startup")
+    ap.add_argument("--no-web", action="store_true",
+                    help="do not serve the configuration page at all")
     args = ap.parse_args()
 
     if args.preview:
         preview(args.preview, args.scale)
         return 0
 
+    cfgw = config.Watcher()
     col = macstats.Collector()
-    period = 1.0 / max(0.1, args.hz)
+    apply_config(col, cfgw.cfg)
     time.sleep(0.3)   # let the rate counters settle
 
     if args.stdout:
+        period = 1.0 / max(0.1, args.hz or cfgw.cfg["hz"])
         while True:
             sys.stdout.write(json.dumps(col.sample(), separators=(",", ":")) + "\n")
             sys.stdout.flush()
@@ -174,7 +198,22 @@ def main():
               file=sys.stderr)
         return 1
 
-    return stream(args, col, serial, period)
+    status = webui.Status()
+    status.set(started=time.time())
+    url = None
+    if not args.no_web:
+        srv, actual = webui.serve(status, int(cfgw.cfg["web_port"]))
+        if srv is not None:
+            url = "http://127.0.0.1:%d/" % actual
+            print("configuration page: %s" % url, flush=True)
+            if not args.no_browser:
+                try:
+                    import webbrowser
+                    webbrowser.open(url)
+                except Exception:
+                    pass
+
+    return stream(args, col, serial, cfgw, status)
 
 
 def _describe_gap(seconds):
@@ -186,7 +225,7 @@ def _describe_gap(seconds):
     return "%dh%02dm" % (seconds // 3600, (seconds % 3600) // 60)
 
 
-def stream(args, col, serial, period, limit=None):
+def stream(args, col, serial, cfgw, status, limit=None):
     """Send frames until interrupted, reconnecting as the board comes and
     goes. `limit` caps the iterations, for tests.
 
@@ -203,18 +242,34 @@ def stream(args, col, serial, period, limit=None):
     chatter = b""
     lost_at = None
     rounds = 0
+    period = 1.0 / max(0.1, args.hz or cfgw.cfg["hz"])
 
     while limit is None or rounds < limit:
         rounds += 1
         start = time.time()
+
+        # Settings changed in the config page take effect without a
+        # restart; a changed port drops the link so it is reopened.
+        if cfgw.poll():
+            apply_config(col, cfgw.cfg)
+            period = 1.0 / max(0.1, args.hz or cfgw.cfg["hz"])
+            wanted = args.port or cfgw.cfg["port"] or None
+            if ser is not None and wanted and wanted != port:
+                try:
+                    ser.close()
+                except Exception:
+                    pass
+                ser = None
+
         try:
             if ser is None:
-                port = find_port(args.port)
+                port = find_port(args.port or cfgw.cfg["port"] or None)
                 if port is None:
                     if not waiting:
                         print("waiting for the Presto...", flush=True)
                         waiting = True
                         lost_at = lost_at or time.time()
+                    status.set(connected=False, port=None)
                     time.sleep(2)
                     continue
                 ser = serial.Serial(port, BAUD, timeout=0, write_timeout=5)
@@ -224,6 +279,7 @@ def stream(args, col, serial, period, limit=None):
                        else " after %s" % _describe_gap(time.time() - lost_at))
                 lost_at = None
                 print("connected to %s%s" % (port, gap), flush=True)
+                status.set(connected=True, port=port, last_error="")
                 time.sleep(0.5)
                 # Rates come from the delta between two samples. After an
                 # outage the previous one is however old the outage was, so
@@ -234,12 +290,16 @@ def stream(args, col, serial, period, limit=None):
                 except Exception as e:
                     print("priming failed: %s" % e, flush=True)
 
+            t0 = time.time()
             frame = col.sample()
+            status.set(sample_ms=(time.time() - t0) * 1000.0)
+            frame["cfg"] = device_config(cfgw.cfg)
             # Process listings cost ~25 ms and are an order of magnitude
             # larger than the summary, so they are gathered only while a
             # panel is open, and at a slower cadence than the frame rate.
             if view:
-                if time.time() - detail_at >= DETAIL_PERIOD or detail is None:
+                if (time.time() - detail_at >= cfgw.cfg["detail_period"]
+                        or detail is None):
                     detail = col.detail(view)
                     detail_at = time.time()
                 if detail:
@@ -247,6 +307,7 @@ def stream(args, col, serial, period, limit=None):
             ser.write((json.dumps(frame, separators=(",", ":"))
                        + "\n").encode())
             ser.flush()
+            status.frames += 1
 
             # Drain the board's output so its buffer cannot back up, and
             # watch it for which breakdown the screen is showing.
@@ -256,7 +317,8 @@ def stream(args, col, serial, period, limit=None):
                 raise           # the port has gone; reconnect below
             except Exception:
                 chatter = b""
-            if VIEW_TAG in chatter or LEVEL_TAG in chatter:
+            if (VIEW_TAG in chatter or LEVEL_TAG in chatter
+                    or CFG_TAG in chatter):
                 lines = chatter.split(b"\n")
                 # A level announcement can be long; keep enough of a
                 # partial line to finish it on the next read.
@@ -268,6 +330,11 @@ def stream(args, col, serial, period, limit=None):
                         want = want if want in VIEWS else None
                         if want != view:
                             view, detail, detail_at = want, None, 0.0
+                            status.set(view=view)
+                    if CFG_TAG in line:
+                        print("board applied %s" % line.split(
+                            CFG_TAG, 1)[1].strip().decode("ascii", "ignore"),
+                            flush=True)
                     if LEVEL_TAG in line:
                         payload = parse_level(line)
                         if payload is not None:
@@ -278,6 +345,7 @@ def stream(args, col, serial, period, limit=None):
         except (OSError, IOError) as e:
             # Unplugged, reset by a deploy, or the port renamed itself.
             print("link error on %s: %s" % (port, e), flush=True)
+            status.set(connected=False, last_error=str(e))
             try:
                 if ser:
                     ser.close()
@@ -293,6 +361,7 @@ def stream(args, col, serial, period, limit=None):
             # it, but a persistent one would become a restart loop, and the
             # board would blink between standby and live the whole time.
             print("sampling error: %s: %s" % (type(e).__name__, e), flush=True)
+            status.set(last_error="%s: %s" % (type(e).__name__, e))
             time.sleep(1)
             continue
 

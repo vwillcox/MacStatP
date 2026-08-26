@@ -41,6 +41,7 @@ SAVE_EVERY = 30      # seconds between history writes to the SD card
 IDLE_LIMIT = 5       # seconds without data before the link reads as dead
 HOLD_MS = 700        # press longer than this is a hold, not a tap
 VIEW_TAG = "#V:"     # prefix the agent watches for on our stdout
+CFG_TAG = "#C:"      # settings the board has actually applied
 
 DASH, BUDDY = 0, 1   # the two faces
 SHADE_TOP = 60       # a swipe starting this high up is the mode switch
@@ -144,16 +145,50 @@ async def main():
     press_xy = (0, 0)
     last_xy = (0, 0)
     frames = 0
+    last_cfg_b = brightness
 
     while True:
         incoming = link.read()
         shot = False
         if incoming:
-            if incoming.get("cmd") == "shot":
+            cmd = incoming.get("cmd")
+            if cmd == "shot":
                 shot = True
+            elif cmd == "unshot":
+                # Drop the previous capture so a stale file can't be read
+                # back and mistaken for a fresh one.
+                try:
+                    import os as _os
+                    _os.remove(storage.SHOT)
+                except Exception:
+                    pass
             else:
                 data = incoming
                 detail = incoming.get("det")
+                cfg = incoming.get("cfg")
+                if cfg:
+                    # Settings arrive with every frame; only act on a
+                    # change, since set_backlight is not free.
+                    want = float(cfg.get("b", brightness))
+                    if abs(want - brightness) > 0.01:
+                        brightness = want
+                        store.config["brightness"] = brightness
+                        store.save_config()
+                        try:
+                            d.set_backlight(brightness)
+                        except Exception:
+                            pass
+                    bits = bool(cfg.get("bits", 0))
+                    if bits != dashboard.NET_BITS:
+                        dashboard.set_net_units(bits)
+                        db.invalidate()
+                        applied = True
+                    else:
+                        applied = False
+                    if applied or want != last_cfg_b:
+                        last_cfg_b = want
+                        # Tell the host what stuck; the agent logs it.
+                        print("%sbits=%d b=%.2f" % (CFG_TAG, bits, want))
                 db.push(data)
                 last_rx = time.time()
 
