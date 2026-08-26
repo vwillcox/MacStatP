@@ -61,6 +61,16 @@ class Display:
     def update(self):
         self._p.update()
 
+    def set_backlight(self, level):
+        """Route to the Presto board, not to PicoGraphics.
+
+        Both objects expose set_backlight, and __getattr__ would forward
+        this to PicoGraphics, where it does nothing on this hardware. The
+        backlight is the Presto's, so brightness changes silently had no
+        effect at all.
+        """
+        self._p.set_backlight(level)
+
 
 def cycle_brightness(level):
     for step in (0.25, 0.55, 0.85, 1.0):
@@ -118,8 +128,8 @@ async def main():
     brightness = float(store.config.get("brightness", 0.85))
     try:
         d.set_backlight(brightness)
-    except Exception:
-        pass
+    except Exception as e:
+        store.log("backlight failed at boot: %s" % e)
 
     link = Link()
     try:
@@ -176,8 +186,8 @@ async def main():
                         store.save_config()
                         try:
                             d.set_backlight(brightness)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            store.log("backlight failed: %s" % e)
                     bits = bool(cfg.get("bits", 0))
                     if bits != dashboard.NET_BITS:
                         dashboard.set_net_units(bits)
@@ -257,8 +267,8 @@ async def main():
                         store.save_config()
                         try:
                             d.set_backlight(brightness)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            store.log("backlight failed: %s" % e)
                     else:
                         hit = db.hit_test(press_xy[0], press_xy[1])
                         if hit:

@@ -287,6 +287,25 @@ def test_stream_reacts_to_a_level_up():
     check("and read it correctly", seen and seen[0]["reward"] == "MINT COAT")
 
 
+def test_backlight_goes_to_the_board():
+    """device/main.py cannot be imported here — it pulls in the Presto
+    hardware — so this reads the source. Worth having anyway: the Display
+    wrapper forwards unknown attributes to PicoGraphics, and both it and
+    the Presto expose set_backlight. Forwarding this one lands on the
+    PicoGraphics version, which does nothing on this hardware, so the
+    brightness setting silently had no effect."""
+    print("backlight routing")
+    src = open(os.path.join(HERE, "..", "device", "main.py")).read()
+    body = src[src.index("class Display"):src.index("def cycle_brightness")]
+    check("Display defines set_backlight rather than forwarding it",
+          "def set_backlight" in body)
+    fn = body[body.index("def set_backlight"):]
+    check("and sends it to the Presto, not the graphics object",
+          "self._p.set_backlight" in fn, fn.splitlines()[-1])
+    check("no silently swallowed backlight failures",
+          "except Exception:\n                            pass" not in src)
+
+
 def test_gap_wording():
     print("gap wording")
     check("seconds", agent._describe_gap(45) == "45s")
@@ -295,6 +314,7 @@ def test_gap_wording():
 
 
 for test in (test_waits_for_a_missing_board, test_reconnects_after_an_unplug,
+             test_backlight_goes_to_the_board,
              test_primes_rates_on_reconnect, test_survives_a_bad_sample,
              test_read_failure_is_a_disconnect, test_level_announcements,
              test_stream_reacts_to_a_level_up, test_gap_wording):
