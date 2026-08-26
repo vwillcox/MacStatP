@@ -5,8 +5,8 @@
   <key>CFBundleName</key><string>MacStatP</string>
   <key>CFBundleDisplayName</key><string>MacStatP</string>
   <key>CFBundleIdentifier</key><string>local.statusdisplay.app</string>
-  <key>CFBundleVersion</key><string>4c63c7f</string>
-  <key>CFBundleShortVersionString</key><string>4c63c7f</string>
+  <key>CFBundleVersion</key><string>f64ef24</string>
+  <key>CFBundleShortVersionString</key><string>f64ef24</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleExecutable</key><string>MacStatP</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>

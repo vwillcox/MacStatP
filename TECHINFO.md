@@ -122,7 +122,22 @@ scale, value columns are measured against the labels beside them, and
 where there's more room than the contents need the surplus goes into the
 gaps with the remainder centred, rather than stretching everything.
 
-All 31 on/off combinations and all 325 orderings are checked by the tests.
+Panels drop their least important parts rather than overflowing when a
+box is short: the plots go first, then a meter, then rows of figures.
+Every panel is also clipped to its own card while it draws — the geometry
+is careful, but a panel that gets its arithmetic wrong should draw itself
+badly rather than scribble over its neighbour.
+
+That was not always true. Five panels with the network in the middle
+makes four rows, and at that height the fixed minimum sizes ran past the
+bottom edge: CPU's cores, GPU's history, MEMORY's rows and DISK's
+throughput all drew over the panel below, which looked exactly like the
+display corrupting.
+
+All 31 on/off combinations and all 325 orderings are checked by the
+tests, and `host/test_layout.py` sweeps every box size the packer can
+produce, asserting nothing lands past an edge and that a real render
+leaves the gaps between cards untouched.
 
 ## The font
 

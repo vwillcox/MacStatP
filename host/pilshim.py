@@ -31,6 +31,13 @@ class PILDisplay:
         self._draw.rectangle([0, 0, self._img.width, self._img.height],
                              fill=self._pen)
 
+    def set_clip(self, x, y, w, h):
+        s = self.scale
+        self._clip = (x * s, y * s, (x + w) * s, (y + h) * s)
+
+    def remove_clip(self):
+        self._clip = None
+
     def rectangle(self, x, y, w, h):
         s = self.scale
         if w <= 0 or h <= 0:

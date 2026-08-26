@@ -118,6 +118,14 @@ use the arrows) to change their order — that's the order they appear on
 the screen. Whatever's left grows to fill the display: two panels to a
 row, with a full-width row for the network.
 
+A link that is switched off is not shown at all. With Wi-Fi off, the
+wired connection gets the whole NETWORK card to itself.
+
+The network always takes a whole row, so putting it in the *middle* of
+the order splits the rest into more rows and everything gets shorter —
+panels then drop their least important parts to fit. Keeping the network
+first or last leaves the other cards roomier.
+
 The page is only reachable from your own Mac. It has no password, and it
 shows what your machine is running, so it deliberately isn't available to
 anything else on the network.
@@ -130,7 +138,7 @@ anything else on the network.
 | **GPU** | Utilisation, VRAM in use, recent peak, history plot |
 | **MEMORY** | Pressure %, used/total, wired, compressed, swap |
 | **DISK** | Volume capacity, read and write throughput |
-| **NETWORK** | Wi-Fi and wired links, each with down/up and a sparkline |
+| **NETWORK** | Each live link, with down/up and a sparkline |
 
 ### Tap for detail
 

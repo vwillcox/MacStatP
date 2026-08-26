@@ -13,30 +13,51 @@ class Canvas:
     def __init__(self, w, h, bg=(0, 0, 0)):
         self.w, self.h = w, h
         self.px = bytearray(w * h * 3)
+        # Matches PicoGraphics' clip rectangle, so a preview shows the
+        # same thing the panel does.
+        self.clip = None
         self.fill_all(bg)
+
+    def set_clip(self, x, y, w, h):
+        self.clip = (x, y, x + w, y + h)
+
+    def remove_clip(self):
+        self.clip = None
+
+    def _bounds(self):
+        if self.clip is None:
+            return 0, 0, self.w, self.h
+        x0, y0, x1, y1 = self.clip
+        return (max(0, x0), max(0, y0), min(self.w, x1), min(self.h, y1))
 
     def fill_all(self, c):
         self.px[:] = bytes(c) * (self.w * self.h)
 
     def pixel(self, x, y, c):
-        if 0 <= x < self.w and 0 <= y < self.h:
+        cx0, cy0, cx1, cy1 = self._bounds()
+        if cx0 <= x < cx1 and cy0 <= y < cy1:
             o = (y * self.w + x) * 3
             self.px[o:o + 3] = bytes(c)
 
     def rect(self, x, y, w, h, c):
-        row = bytes(c) * max(0, min(w, self.w - x))
-        for yy in range(max(0, y), min(self.h, y + h)):
-            o = (yy * self.w + max(0, x)) * 3
+        cx0, cy0, cx1, cy1 = self._bounds()
+        x0, x1 = max(cx0, x), min(cx1, x + w)
+        if x1 <= x0:
+            return
+        row = bytes(c) * (x1 - x0)
+        for yy in range(max(cy0, y), min(cy1, y + h)):
+            o = (yy * self.w + x0) * 3
             self.px[o:o + len(row)] = row
 
     def polygon(self, pts, c):
         """Even-odd scanline fill, matching a simple convex filler."""
         if len(pts) < 3:
             return
+        cx0, cy0, cx1, cy1 = self._bounds()
         ys = [p[1] for p in pts]
         y0, y1 = int(min(ys)), int(max(ys)) + 1
         col = bytes(c)
-        for y in range(max(0, y0), min(self.h, y1)):
+        for y in range(max(cy0, y0), min(cy1, y1)):
             yc = y + 0.5
             xs = []
             n = len(pts)
@@ -50,7 +71,7 @@ class Canvas:
                 xa, xb = int(round(xs[i])), int(round(xs[i + 1]))
                 if xb <= xa:
                     continue
-                xa, xb = max(0, xa), min(self.w, xb)
+                xa, xb = max(cx0, xa), min(cx1, xb)
                 if xb > xa:
                     o = (y * self.w + xa) * 3
                     self.px[o:o + (xb - xa) * 3] = col * (xb - xa)

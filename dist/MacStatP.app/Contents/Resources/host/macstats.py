@@ -691,18 +691,26 @@ class Collector:
         return None
 
     def _links(self, per, now):
+        """The links worth showing.
+
+        A link that is down is left out rather than drawn as a dead row:
+        with Wi-Fi switched off there is nothing to report, and the space
+        is better given to the one carrying traffic.
+        """
         out = []
         for label, dev in self.picker.pick(per):
             rx = tx = 0.0
             if dev in per:
                 rx = self._rate(dev, "rx").update(per[dev][0], now)
                 tx = self._rate(dev, "tx").update(per[dev][1], now)
+            if not self._link_up(dev, now):
+                continue
             out.append({
                 "n": label,
                 "d": dev.upper(),
                 "rx": round(rx),
                 "tx": round(tx),
-                "up": 1 if self._link_up(dev, now) else 0,
+                "up": 1,
             })
         return out
 

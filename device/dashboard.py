@@ -181,6 +181,7 @@ class Dashboard:
         self.links = {}     # device name -> recent total throughput
         self._mode = None
         self._lit = {}      # gauge id -> lit segment count from last frame
+        self._net_rows = 2  # interfaces the network panel last drew
         self.panels = PANEL_ORDER
         self._rects = {}
         self._geom = {}
@@ -245,21 +246,42 @@ class Dashboard:
         cx = gcx + r + 12
         cw = max(40, x + w - PAD - cx)
 
+        # Place top-down against the real bottom edge. Sizing anything by
+        # a fixed minimum overflowed the card when the row was short, and
+        # the overflow landed on the panel below.
+        bottom = y + h - PAD
         mh = 29                                   # label plus its bar
-        ph = max(20, min(int(avail * 0.30), 160))
-        extra = max(0, avail - (mh * 2 + 16 + ph))
-        gapv = max(6, extra // 3)
-        used = mh * 2 + gapv * 2 + 16 + ph
-        ay = top + max(0, (avail - used) // 2)
+        want_plot = min(int(avail * 0.30), 160)
+        extra = max(0, avail - (mh * 2 + 16 + want_plot))
+        gapv = max(4, extra // 3)
+        ay = top
         by = ay + mh + gapv
         ly = by + mh + gapv
+        py = ly + 16
+        ph = bottom - py
+        if ph < 16:                 # no room for a plot; drop it
+            ph = 0
+            ly = 0
+            py = 0
+        elif ph > want_plot:
+            # Spare room goes into the gaps, then the block is centred.
+            ph = want_plot
+            slack = bottom - (py + ph)
+            ay += slack // 2
+            by += slack // 2
+            ly += slack // 2
+            py += slack // 2
+        if by + mh > bottom:        # not even two meters fit
+            by = 0
+        if ay + mh > bottom:        # nor even one
+            ay = 0
         # meter_value erases before redrawing; keep that box clear of the
         # label to its left.
         mvw = max(30, int(cw - max(font.width(l, 12)
                                    for l in ("LOAD", "VRAM", "PEAK")) - 10))
         return {"gcx": gcx, "gcy": top + avail // 2, "r": r,
                 "cx": cx, "cw": cw, "ay": ay, "by": by,
-                "ly": ly, "py": ly + 16, "ph": ph, "mvw": mvw}
+                "ly": ly, "py": py, "ph": ph, "mvw": mvw}
 
     @staticmethod
     def _fit_pair(labels, sample, cw, hi, lo=9):
@@ -283,8 +305,11 @@ class Dashboard:
         gcx = x + PAD + r
         cx = gcx + r + 12
         cw = max(40, x + w - PAD - cx)
-        step = max(14, min(26, int(avail / (len(MEM_ROWS) + 0.6))))
-        ry = top + max(0, (avail - step * len(MEM_ROWS)) // 2)
+        step = max(13, min(26, int(avail / (len(MEM_ROWS) + 0.6))))
+        # Show only what fits. Five rows at the minimum step need 65px,
+        # and a short card has less; the rest used to spill over the edge.
+        rows = max(1, min(len(MEM_ROWS), avail // step))
+        ry = top + max(0, (avail - step * rows) // 2)
         size = Dashboard._fit_pair(MEM_ROWS, "16.0G", cw,
                                    max(10, min(14, step - 5)))
         # The values are erased before being redrawn, so that box has to
@@ -292,39 +317,69 @@ class Dashboard:
         lw = max(font.width(l, size) for l in MEM_ROWS)
         return {"gcx": gcx, "gcy": top + avail // 2, "r": r, "cx": cx,
                 "cw": cw, "ry": ry, "step": step, "size": size,
-                "vw": max(30, int(cw - lw - 8))}
+                "rows": rows, "vw": max(30, int(cw - lw - 8))}
 
     @staticmethod
     def _disk_geom(x, y, w, h):
         top = y + TITLE_H
-        avail = y + h - PAD - top
+        bottom = y + h - PAD
+        avail = max(0, bottom - top)
         cx = x + PAD + 2
         cw = x + w - PAD - cx
-        big = max(20, min(int(avail * 0.26), 46))
-        bar_h = max(8, min(int(avail * 0.09), 16))
-        rate = max(12, min(int(avail * 0.11), 16))
-        used = big + 16 + bar_h + 14 + rate * 2
-        vy = top + max(0, (avail - used) // 2)
-        bar_y = vy + big + 16
+
+        # Placed top-down against the real bottom edge, dropping whatever
+        # will not fit rather than running past it: the figure matters
+        # most, then the bar, then the throughput.
+        big = min(46, max(14, int(avail * 0.26)))
+        if big > avail:
+            big = max(8, avail)
+        bar_h = max(6, min(int(avail * 0.09), 16))
+        rate = max(11, min(int(avail * 0.11), 16))
         rs = Dashboard._fit_pair(("READ", "WRITE"), "426 KB/S", cw,
                                  min(12, rate))
         lw = max(font.width(l, rs) for l in ("READ", "WRITE"))
+
+        bar_y = top + big + 16
+        show_bar = bar_y + bar_h <= bottom
+        ry = bar_y + bar_h + 14
+        rates_extent = (rate + 4) + rs
+        show_rates = show_bar and ry + rates_extent <= bottom
+
+        used = big + 16 + (bar_h if show_bar else -16) \
+            + (14 + rates_extent if show_rates else 0)
+        vy = top + max(0, (avail - used) // 2)
+        bar_y = vy + big + 16
+        ry = bar_y + bar_h + 14
         return {"cx": cx, "cw": cw, "big": big, "vy": vy, "bar_y": bar_y,
-                "bar_h": bar_h, "rate": rate, "ry": bar_y + bar_h + 14,
-                "rs": rs, "rvw": max(40, int(cw - lw - 8))}
+                "bar_h": bar_h, "rate": rate, "ry": ry, "rs": rs,
+                "rvw": max(40, int(cw - lw - 8)),
+                "bar": show_bar, "rates": show_rates}
 
     @staticmethod
-    def _net_geom(x, y, w, h):
+    def _net_geom(x, y, w, h, rows=2):
         top = y + TITLE_H
         avail = y + h - PAD - top
-        row_h = avail // 2
+        row_h = avail // max(1, rows)
         sx = x + int(w * 0.80)
-        return {"top": top, "row_h": row_h,
-                "lx": x + PAD + 4,
+        # A short card cannot fit a name, a device and a rate stacked up.
+        # Below this the device line goes and everything sits on one
+        # baseline, rather than the two rows drawing over each other.
+        compact = row_h < 34
+        vsize = max(13, min(24, int(row_h * 0.62)))
+        lsize = max(11, min(15, row_h - 4))
+        return {"top": top, "avail": avail, "rows": rows,
+                "row_h": row_h, "compact": compact,
+                "lx": x + PAD + 4, "lsize": lsize,
                 "rx": x + int(w * 0.22), "tx": x + int(w * 0.52),
                 "sx": sx, "sw": max(24, x + w - PAD - sx),
-                "sh": max(14, min(row_h - 12, 60)),
-                "vsize": max(15, min(24, int(row_h * 0.55)))}
+                "sh": max(8, min(row_h - 6, 60)),
+                "vsize": vsize,
+                # The arrow and the unit have to live inside the row too.
+                # At full size the arrow was taller than a short row and
+                # got clipped away, and the unit's vertical offset put it
+                # in the row below.
+                "asize": max(9, min(16, vsize)),
+                "usize": max(9, min(11, vsize - 2))}
 
     # ── frame ─────────────────────────────────────────────────────────
     def set_panels(self, panels):
@@ -340,10 +395,21 @@ class Dashboard:
             self._mode = "dash"
             self._lit = {}
             self._last = {}
+            self._net_rows = 2
         for key in self.panels:
             rect = self._rects.get(key)
-            if rect:
-                self._DRAW[key](self, data, *rect)
+            if not rect:
+                continue
+            # Clip to the card. The panels are careful about their own
+            # bounds, but a belt as well as braces: a panel that gets its
+            # arithmetic wrong should draw itself badly, not scribble over
+            # its neighbour.
+            x, y, w, h = rect
+            self.d.set_clip(x, y, w, h)
+            try:
+                self._DRAW[key](self, data, x, y, w, h)
+            finally:
+                self.d.remove_clip()
 
     def _chrome(self, data):
         """Panels and fixed labels. Everything here is frame-invariant."""
@@ -367,30 +433,36 @@ class Dashboard:
             W.card(d, p, x, y, w, h, TITLES[key],
                    accent=theme.ACCENT.get(key, theme.CYAN))
 
+        # The static labels are placed by the same geometry, so clip them
+        # to their cards too.
+
         for key, a, b, plot in (("cpu", "LOAD", "PEAK", "CORES"),
                                 ("gpu", "VRAM", "PEAK", "HISTORY")):
             if key not in self._rects:
                 continue
             g = self._geom[key]
-            W.meter_label(d, p, g["cx"], g["ay"], a)
-            W.meter_label(d, p, g["cx"], g["by"], b)
-            if g["ph"] >= 16:
+            if g["ay"]:
+                W.meter_label(d, p, g["cx"], g["ay"], a)
+            if g["by"]:
+                W.meter_label(d, p, g["cx"], g["by"], b)
+            if g["ph"]:
                 p.set(theme.MUTED)
                 font.text(d, plot, g["cx"], g["ly"], 12)
 
         if "mem" in self._rects:
             g = self._geom["mem"]
-            for i, label in enumerate(MEM_ROWS):
+            for i, label in enumerate(MEM_ROWS[:g["rows"]]):
                 p.set(theme.MUTED)
                 font.text(d, label, g["cx"], g["ry"] + i * g["step"],
                           g["size"])
 
         if "disk" in self._rects:
             g = self._geom["disk"]
-            for i, label in enumerate(("READ", "WRITE")):
-                p.set(theme.MUTED)
-                font.text(d, label, g["cx"], g["ry"] + i * (g["rate"] + 4),
-                          g["rs"])
+            if g["rates"]:
+                for i, label in enumerate(("READ", "WRITE")):
+                    p.set(theme.MUTED)
+                    font.text(d, label, g["cx"],
+                              g["ry"] + i * (g["rate"] + 4), g["rs"])
 
     # ── panels ────────────────────────────────────────────────────────
     def _cpu(self, data, x, y, w, h):
@@ -406,14 +478,16 @@ class Dashboard:
                                    float(cpu.get("pct", 0)), "CPU %",
                                    self._lit.get("cpu"))
 
-        W.meter_value(d, p, g["cx"], g["ay"], g["cw"], "%.2f" % load,
-                      min(1.0, load / ncpu), theme.ACCENT["cpu"],
-                      clear_w=g["mvw"])
-        W.meter_value(d, p, g["cx"], g["by"], g["cw"], "%d%%" % int(peak),
-                      peak / 100.0, theme.heat(peak / 100.0),
-                      clear_w=g["mvw"])
+        if g["ay"]:
+            W.meter_value(d, p, g["cx"], g["ay"], g["cw"], "%.2f" % load,
+                          min(1.0, load / ncpu), theme.ACCENT["cpu"],
+                          clear_w=g["mvw"])
+        if g["by"]:
+            W.meter_value(d, p, g["cx"], g["by"], g["cw"], "%d%%" % int(peak),
+                          peak / 100.0, theme.heat(peak / 100.0),
+                          clear_w=g["mvw"])
 
-        if g["ph"] < 16 or not cores:
+        if not g["ph"] or not cores:
             return
         # Per-core ticks: one slim column per logical core. Each cell
         # repaints its own track, so no separate erase is needed.
@@ -440,14 +514,16 @@ class Dashboard:
         self._lit["gpu"] = W.gauge(d, p, g["gcx"], g["gcy"], g["r"], pct,
                                    "GPU %", self._lit.get("gpu"))
 
-        W.meter_value(d, p, g["cx"], g["ay"], g["cw"], fmt_bytes(vram),
-                      min(1.0, vram / float(total)), theme.ACCENT["gpu"],
-                      clear_w=g["mvw"])
-        W.meter_value(d, p, g["cx"], g["by"], g["cw"], "%d%%" % int(peak),
-                      peak / 100.0, theme.heat(peak / 100.0),
-                      clear_w=g["mvw"])
+        if g["ay"]:
+            W.meter_value(d, p, g["cx"], g["ay"], g["cw"], fmt_bytes(vram),
+                          min(1.0, vram / float(total)),
+                          theme.ACCENT["gpu"], clear_w=g["mvw"])
+        if g["by"]:
+            W.meter_value(d, p, g["cx"], g["by"], g["cw"], "%d%%" % int(peak),
+                          peak / 100.0, theme.heat(peak / 100.0),
+                          clear_w=g["mvw"])
 
-        if g["ph"] < 16:
+        if not g["ph"]:
             return
         self._clr(g["cx"], g["py"], g["cw"], g["ph"])
         W.sparkline(d, p, g["cx"], g["py"], g["cw"], g["ph"], self.gpu_hist,
@@ -463,10 +539,10 @@ class Dashboard:
                                    self._lit.get("mem"))
 
         vals = (mem.get("used"), mem.get("total"), mem.get("wired"),
-                mem.get("comp"), mem.get("swap"))
+                mem.get("comp"), mem.get("swap"))[:g["rows"]]
         vw = g["vw"]
         self._clr(g["cx"] + g["cw"] - vw, g["ry"] - 2, vw,
-                  len(MEM_ROWS) * g["step"])
+                  g["rows"] * g["step"])
         p.set(theme.TEXT)
         for i, v in enumerate(vals):
             font.text(d, fmt_bytes(v), g["cx"] + g["cw"],
@@ -497,9 +573,12 @@ class Dashboard:
         font.text(d, "OF " + fmt_bytes(dk.get("total")), cx + cw,
                   g["vy"] + sz + 6, sz - 2, align=font.RIGHT)
 
-        W.bar(d, p, cx, g["bar_y"], cw, g["bar_h"], pct / 100.0,
-              theme.heat(pct / 100.0))
+        if g["bar"]:
+            W.bar(d, p, cx, g["bar_y"], cw, g["bar_h"], pct / 100.0,
+                  theme.heat(pct / 100.0))
 
+        if not g["rates"]:
+            return
         rv, ru = fmt_rate(dk.get("r"))
         wv, wu = fmt_rate(dk.get("w"))
         rs = g["rs"]
@@ -511,16 +590,37 @@ class Dashboard:
             font.text(d, txt, cx + cw, yy, rs, align=font.RIGHT)
 
     def _net(self, data, x, y, w, h):
-        """One row per interface: Wi-Fi and the live wired link."""
+        """One row per live interface.
+
+        A link that is down is not sent at all, so a machine with Wi-Fi
+        switched off shows one row using the whole card rather than a
+        dead row taking up half of it.
+        """
         d, p = self.d, self.p
-        g = self._geom["net"]
         links = data.get("net", {}).get("links", []) or []
+        rows = max(1, len(links))
+        if rows != self._net_rows:
+            # The row count changed, so whatever was drawn before has to
+            # go before the new layout is drawn over it.
+            self._net_rows = rows
+            self._geom["net"] = self._net_geom(x, y, w, h, rows)
+            self._clr(x + 4, y + TITLE_H - 2, w - 8,
+                      y + h - PAD - (y + TITLE_H) + 4)
+        g = self._geom["net"]
         vsize = g["vsize"]
+
+        if not links:
+            p.set(theme.MUTED)
+            font.text(d, "NO ACTIVE LINKS", x + w // 2,
+                      g["top"] + g["avail"] // 2 - 8, 15, align=font.CENTER)
+            return
 
         # Each interface owns a band; its contents sit in the middle of
         # it rather than at the top, so a tall NETWORK card doesn't leave
         # both rows stranded against their titles.
-        content_h = max(34, g["sh"], vsize + 10)
+        content_h = min(g["row_h"],
+                        max(g["sh"], vsize + 6,
+                            34 if not g["compact"] else g["lsize"] + 4))
         for i in range(2):
             band = g["top"] + i * g["row_h"]
             self._clr(x + 8, band, w - 16, g["row_h"] - 2)
@@ -532,24 +632,37 @@ class Dashboard:
             dev = str(ln.get("d", "")).upper()
 
             p.set(theme.TEXT if up else theme.MUTED)
-            font.text(d, str(ln.get("n", "NET")).upper(), g["lx"], ry, 15)
+            name = str(ln.get("n", "NET")).upper()
+            font.text(d, name, g["lx"], ry, g["lsize"])
             p.set(theme.MUTED)
-            font.text(d, dev, g["lx"], ry + 18, 11)
-            if not up:
-                font.text(d, "DOWN", g["lx"] + 46, ry + 18, 11)
+            if g["compact"]:
+                # No room underneath, so the down marker follows the name.
+                if not up:
+                    font.text(d, "DOWN",
+                              g["lx"] + font.width(name, g["lsize"]) + 6,
+                              ry + 2, 10)
+            else:
+                font.text(d, dev, g["lx"], ry + 18, 11)
+                if not up:
+                    font.text(d, "DOWN", g["lx"] + 46, ry + 18, 11)
 
             for key, arrow, colour, bx in (
                     ("rx", "\x11", theme.ACCENT["rx"], g["rx"]),
                     ("tx", "\x10", theme.ACCENT["tx"], g["tx"])):
                 val, unit = fmt_net_rate(ln.get(key, 0))
                 p.set(colour if up else theme.TRACK)
-                font.text(d, arrow, bx, ry + 3, 16)
+                font.text(d, arrow, bx, ry + (vsize - g["asize"]) // 2 + 2,
+                          g["asize"])
                 p.set(theme.TEXT if up else theme.MUTED)
                 vx = bx + 20
                 font.text(d, val, vx, ry, vsize)
                 p.set(theme.MUTED)
+                # Sit the unit on the value's baseline rather than below
+                # it, so a short row cannot push it into the next one.
+                usize = g["usize"]
+                uy = ry + (vsize - usize) if g["compact"] else ry + vsize * 0.5
                 font.text(d, unit, vx + font.width(val, vsize) + 5,
-                          ry + vsize * 0.5, 11)
+                          uy, usize)
 
             # Each row scales to its own history: a quiet Wi-Fi link stays
             # readable next to a busy wired one.

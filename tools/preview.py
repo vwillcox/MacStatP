@@ -51,6 +51,12 @@ class ShimDisplay:
     def clear(self):
         self.cv.fill_all(self._pen)
 
+    def set_clip(self, x, y, w, h):
+        self.cv.set_clip(int(x), int(y), int(w), int(h))
+
+    def remove_clip(self):
+        self.cv.remove_clip()
+
     def rectangle(self, x, y, w, h):
         self.cv.rect(int(x), int(y), int(w), int(h), self._pen)
 
