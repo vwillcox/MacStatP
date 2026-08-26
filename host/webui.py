@@ -115,7 +115,34 @@ padding:10px 20px;font:inherit;font-weight:700;cursor:pointer}
 button.ghost{background:transparent;color:var(--txt);
 border:1px solid var(--line);font-weight:400}
 button:disabled{opacity:.5;cursor:default}
-.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+position:sticky;bottom:0;background:var(--bg);padding:14px 0 4px}
+.tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid
+var(--line);flex-wrap:wrap}
+.tabs button{background:transparent;color:var(--mut);border:0;
+border-bottom:2px solid transparent;border-radius:0;padding:10px 16px;
+font:inherit;font-size:12px;letter-spacing:.14em;font-weight:600}
+.tabs button[aria-selected=true]{color:var(--cyan);
+border-bottom-color:var(--cyan)}
+.tabs button:hover{color:var(--txt)}
+.plist{display:flex;flex-direction:column;gap:7px;padding:4px 0}
+.pill{display:flex;align-items:center;gap:12px;background:#0b0f16;
+border:1px solid var(--line);border-radius:8px;padding:11px 13px;
+user-select:none}
+.pill.drag{opacity:.4}
+.pill.over{border-color:var(--cyan)}
+.pill .grip{cursor:grab;color:var(--mut);letter-spacing:2px;font-size:13px}
+.pill .sw{width:9px;height:9px;border-radius:2px;background:var(--line);
+flex:0 0 auto}
+.pill.on .sw{background:var(--cyan)}
+.pill .nm{flex:1}
+.pill.off .nm{color:var(--mut)}
+.pill input[type=checkbox]{margin:0}
+.pill .mv{background:transparent;border:1px solid var(--line);color:var(--mut);
+border-radius:5px;padding:3px 9px;font:inherit;font-size:12px;font-weight:400}
+.pill .mv:hover:not(:disabled){color:var(--cyan);border-color:var(--cyan)}
+.pill .mv:disabled{opacity:.3}
+.note{color:var(--mut);font-size:12px;margin:10px 2px 0}
 #msg{color:var(--grn);font-size:13px;min-height:18px;margin-left:2px}
 #msg.err{color:var(--red)}
 .err{color:var(--red)}
@@ -124,10 +151,21 @@ code{color:var(--amb)}
 <h1>MACSTATP</h1>
 <div class="sub">Status display for the Pimoroni Presto</div>
 
-<div class="card"><h2>STATUS</h2><div id="status"></div></div>
+<div class="tabs" id="tabs" role="tablist"></div>
+
+<div class="card" data-tab="status"><h2>STATUS</h2>
+<div id="status"></div></div>
 
 <form id="f">
-<div class="card"><h2>CONNECTION</h2>
+<div class="card" data-tab="panels"><h2>PANELS ON THE DISPLAY</h2>
+<div class="plist" id="panels"></div>
+<p class="note">Drag a row, or use the arrows, to change the running
+order &mdash; that is the order they appear on the display. Whatever is
+switched on is packed to fill the screen: two to a row, with a full-width
+row for the network. Turn everything off and the board says so rather
+than showing a blank screen.</p></div>
+
+<div class="card" data-tab="connection"><h2>CONNECTION</h2>
 <div class="row"><label>Serial port<span class="hint">Blank auto-detects
 the board</span></label><select id="port" name="port"></select></div>
 <div class="row"><label>Update rate<span class="hint">Frames per second.
@@ -135,7 +173,7 @@ The board renders about 7</span></label>
 <input type="number" id="hz" name="hz" min="0.2" max="15" step="0.1"></div>
 </div>
 
-<div class="card"><h2>DISPLAY</h2>
+<div class="card" data-tab="display"><h2>DISPLAY</h2>
 <div class="row"><label>Brightness<span class="hint">Backlight level</span>
 </label><input type="range" id="brightness" name="brightness" min="0.1"
 max="1" step="0.05"><span id="bval" class="hint"></span></div>
@@ -148,7 +186,7 @@ process listings while a panel is open</span></label>
 max="10" step="0.25"></div>
 </div>
 
-<div class="card"><h2>WHAT TO MEASURE</h2>
+<div class="card" data-tab="measure"><h2>WHAT TO MEASURE</h2>
 <div class="row"><label>Disk volume<span class="hint">Which volume the DISK
 panel shows</span></label><select id="disk_path" name="disk_path"></select>
 </div>
@@ -160,7 +198,7 @@ panel shows</span></label><select id="disk_path" name="disk_path"></select>
 <select id="net_wired" name="net_wired"></select></div>
 </div>
 
-<div class="card"><h2>APPLICATION</h2>
+<div class="card" data-tab="app"><h2>APPLICATION</h2>
 <div class="row"><label>Start at login<span class="hint">Runs in the
 background from /Applications</span></label>
 <input type="checkbox" id="login" name="login"></div>
@@ -170,7 +208,7 @@ effect next start</span></label>
 </div>
 </div>
 
-<div class="bar"><button type="submit">Save</button>
+<div class="bar" id="bar"><button type="submit">Save</button>
 <button type="button" class="ghost" id="reset">Reset to defaults</button>
 <span id="msg"></span></div>
 </form>
@@ -178,6 +216,108 @@ effect next start</span></label>
 <script>
 const $=i=>document.getElementById(i);
 let choices={};
+
+const TABS=[["status","Status"],["panels","Panels"],
+            ["connection","Connection"],["display","Display"],
+            ["measure","Measure"],["app","App"]];
+const PANELS=[["cpu","CPU"],["gpu","GPU"],["mem","Memory"],
+              ["disk","Disk"],["net","Network"]];
+let tab=localStorage.getItem("mstab")||"status";
+// Once anything has been edited, the poll stops refilling the form.
+// Focus alone was not enough: re-rendering the panel list destroys the
+// button that was focused, and the next poll then wiped the change.
+let dirty=false;
+function touched(){dirty=true;}
+
+function buildTabs(){
+  const bar=$("tabs");
+  for(const [id,label] of TABS){
+    const b=document.createElement("button");
+    b.type="button";b.textContent=label;b.dataset.tab=id;
+    b.setAttribute("role","tab");
+    b.addEventListener("click",()=>select(id));
+    bar.appendChild(b);
+  }
+  select(tab);
+}
+function select(id){
+  tab=id;
+  try{localStorage.setItem("mstab",id);}catch(e){}
+  for(const b of $("tabs").children)
+    b.setAttribute("aria-selected",String(b.dataset.tab===id));
+  // Scope to the cards: the tab buttons carry data-tab as well, and
+  // hiding those hid the tab strip itself.
+  for(const c of document.querySelectorAll(".card[data-tab]"))
+    c.style.display=c.dataset.tab===id?"":"none";
+  // The Save button is pointless on the read-only status tab.
+  $("bar").style.display=id==="status"?"none":"";
+}
+// The running order lives in the DOM order of this list, so reading it
+// back is just walking the rows.
+let order=PANELS.map(p=>p[0]);
+let dragging=null;
+
+function panelName(id){
+  for(const [k,label] of PANELS) if(k===id) return label;
+  return id;
+}
+function renderPanels(enabled){
+  const g=$("panels");
+  g.innerHTML='';
+  order.forEach((id,i)=>{
+    const on=enabled.includes(id);
+    const row=document.createElement('div');
+    row.className='pill '+(on?'on':'off');
+    row.draggable=true;row.dataset.panel=id;
+    row.innerHTML=
+      '<span class="grip" title="Drag to reorder">::</span>'+
+      '<input type="checkbox" '+(on?'checked':'')+'>'+
+      '<span class="sw"></span><span class="nm">'+panelName(id)+'</span>'+
+      '<button type="button" class="mv up" '+(i===0?'disabled':'')+
+        ' title="Move up">&#9650;</button>'+
+      '<button type="button" class="mv dn" '+
+        (i===order.length-1?'disabled':'')+' title="Move down">&#9660;</button>';
+    row.querySelector('input').addEventListener('change',e=>{
+      touched();
+      row.classList.toggle('on',e.target.checked);
+      row.classList.toggle('off',!e.target.checked);});
+    row.querySelector('.up').addEventListener('click',()=>move(id,-1));
+    row.querySelector('.dn').addEventListener('click',()=>move(id,1));
+    row.addEventListener('dragstart',e=>{
+      dragging=id;row.classList.add('drag');
+      e.dataTransfer.effectAllowed='move';});
+    row.addEventListener('dragend',()=>{
+      dragging=null;row.classList.remove('drag');
+      for(const r of g.children) r.classList.remove('over');});
+    row.addEventListener('dragover',e=>{
+      e.preventDefault();if(dragging&&dragging!==id) row.classList.add('over');});
+    row.addEventListener('dragleave',()=>row.classList.remove('over'));
+    row.addEventListener('drop',e=>{
+      e.preventDefault();
+      if(dragging&&dragging!==id) placeBefore(dragging,id);});
+    g.appendChild(row);
+  });
+}
+function currentEnabled(){
+  return [...document.querySelectorAll('#panels .pill')]
+    .filter(r=>r.querySelector('input').checked).map(r=>r.dataset.panel);
+}
+function move(id,delta){
+  touched();
+  const enabled=currentEnabled();
+  const i=order.indexOf(id),j=i+delta;
+  if(j<0||j>=order.length) return;
+  order.splice(j,0,order.splice(i,1)[0]);
+  renderPanels(enabled);
+}
+function placeBefore(src,target){
+  touched();
+  const enabled=currentEnabled();
+  order.splice(order.indexOf(src),1);
+  order.splice(order.indexOf(target),0,src);
+  renderPanels(enabled);
+}
+function buildPanels(){}
 function opts(sel,list,cur,blank){
   sel.innerHTML='';
   if(blank!==undefined){const o=document.createElement('option');
@@ -206,7 +346,7 @@ async function refresh(){
     '<div class="stat"><span>Panel open</span><span>'+(s.view||'dashboard')+'</span></div>'+
     (s.last_error?'<div class="stat"><span>Last error</span><span class="err">'+
       s.last_error+'</span></div>':'');
-  if(document.activeElement&&document.activeElement.form)return;
+  if(dirty)return;
   fill(d.config,d.login);
 }
 function fill(c,login){
@@ -218,10 +358,18 @@ function fill(c,login){
   $('bval').textContent=Math.round(c.brightness*100)+'%';
   $('net_bits').checked=c.net_bits;$('detail_period').value=c.detail_period;
   $('net_auto').checked=c.net_auto;$('web_port').value=c.web_port;
-  $('login').checked=login;toggleNet();
+  $('login').checked=login;
+  const on=c.panels||[];
+  // Enabled first, in the stored order, then the rest: the list shows
+  // the running order, and what is off sits below it.
+  order=on.concat(PANELS.map(p=>p[0]).filter(k=>!on.includes(k)));
+  renderPanels(on);
+  toggleNet();
 }
 function toggleNet(){const a=$('net_auto').checked;
   $('net_wifi').disabled=a;$('net_wired').disabled=a;}
+$('f').addEventListener('input',touched);
+$('f').addEventListener('change',touched);
 $('net_auto').addEventListener('change',toggleNet);
 $('brightness').addEventListener('input',e=>{
   $('bval').textContent=Math.round(e.target.value*100)+'%';});
@@ -232,13 +380,15 @@ $('f').addEventListener('submit',async e=>{
     net_auto:$('net_auto').checked,net_wifi:$('net_wifi').value,
     net_wired:$('net_wired').value,brightness:+$('brightness').value,
     net_bits:$('net_bits').checked,detail_period:+$('detail_period').value,
-    login:$('login').checked};
+    login:$('login').checked,
+    panels:currentEnabled()};
   const m=$('msg');
   try{
     const r=await fetch('/api/config',{method:'POST',
       headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();
     if(!r.ok)throw new Error(d.error||'save failed');
+    dirty=false;
     m.className='';m.textContent='Saved'+(d.login_note?' - '+d.login_note:'');
   }catch(err){m.className='err';m.textContent=String(err.message||err);}
   setTimeout(()=>{m.textContent='';},4000);
@@ -248,9 +398,9 @@ $('reset').addEventListener('click',async()=>{
   await fetch('/api/config',{method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({reset:true})});
-  refresh();
+  dirty=false;refresh();
 });
-refresh();setInterval(refresh,2000);
+buildTabs();buildPanels();refresh();setInterval(refresh,2000);
 </script></body></html>
 """
 

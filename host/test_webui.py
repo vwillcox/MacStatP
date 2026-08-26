@@ -107,6 +107,24 @@ def main():
     check("never shells out to launchctl",
           not any("launchctl" in str(c) for c in ran), ran)
 
+    print("panels")
+    # The order is the running order on the display, so it survives.
+    code, body = post(base + "/api/config",
+                      {"panels": ["net", "cpu", "bogus"]})
+    check("order is kept and unknown names dropped",
+          code == 200 and body["config"]["panels"] == ["net", "cpu"],
+          body["config"]["panels"])
+    code, body = post(base + "/api/config",
+                      {"panels": ["disk", "disk", "cpu"]})
+    check("repeats collapse to one",
+          body["config"]["panels"] == ["disk", "cpu"],
+          body["config"]["panels"])
+    code, _ = post(base + "/api/config", {"panels": []})
+    check("all of them off is allowed", config.load()["panels"] == [])
+    code, _ = get(base + "/api/state")
+    check("page still fine with none selected", code == 200)
+    post(base + "/api/config", {"panels": list(config.PANELS)})
+
     print("bad input")
     code, body = post(base + "/api/config", {"hz": 9999})
     check("out of range is clamped, not rejected",

@@ -37,7 +37,8 @@ failing to start. Nothing the app needs at runtime lives in the repo.
 
 ## Settings
 
-The app serves a configuration page on the loopback interface only:
+The app serves a configuration page on the loopback interface only,
+arranged in tabs:
 
 **http://127.0.0.1:8765/**
 
@@ -50,6 +51,7 @@ The app serves a configuration page on the loopback interface only:
 | Detail refresh | How often process listings are re-gathered |
 | Disk volume | Which volume the DISK panel measures |
 | Interfaces | Auto-detect the Wi-Fi and wired links, or choose them |
+| Panels | Which panels appear, and in what order |
 | Start at login | Adds or removes the launch agent |
 
 Turning "start at login" off leaves the running agent alone — it decides
@@ -57,6 +59,21 @@ what happens at the next login, not what happens now. The page is served
 *by* the agent, so it never runs `launchctl` against its own label:
 doing that unloaded the agent mid-request, and changing the brightness
 would stop the display.
+
+### Panels
+
+Each panel can be switched off, and dragged into whatever order suits —
+that order is the order they appear on the display. Whatever is left is
+packed to fill the screen: two panels to a row, with a full-width row for
+the network, and the last row stretched to the bottom margin so rounding
+cannot leave a gap.
+
+Nothing assumes a fixed grid. Each panel works out its contents from the
+box it is handed, so the same code draws a half-width card and a
+full-screen one: gauges and text scale, columns are measured against
+their labels, and where there is more room than the contents need the
+surplus goes into the gaps rather than stretching everything. All 325
+combinations of choice and order are checked by the tests.
 
 Changes apply without restarting anything: the agent notices the file
 changed and picks it up on the next frame. The board confirms what it

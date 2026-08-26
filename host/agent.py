@@ -155,7 +155,8 @@ def apply_config(col, cfg):
 def device_config(cfg):
     """The slice of settings the board itself acts on."""
     return {"b": round(float(cfg["brightness"]), 2),
-            "bits": 1 if cfg["net_bits"] else 0}
+            "bits": 1 if cfg["net_bits"] else 0,
+            "p": ",".join(cfg["panels"])}
 
 
 def main():

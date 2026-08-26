@@ -155,7 +155,6 @@ async def main():
     press_xy = (0, 0)
     last_xy = (0, 0)
     frames = 0
-    last_cfg_b = brightness
 
     while True:
         incoming = link.read()
@@ -177,28 +176,40 @@ async def main():
                 detail = incoming.get("det")
                 cfg = incoming.get("cfg")
                 if cfg:
-                    # Settings arrive with every frame; only act on a
-                    # change, since set_backlight is not free.
-                    want = float(cfg.get("b", brightness))
-                    if abs(want - brightness) > 0.01:
-                        brightness = want
+                    # Settings ride along with every frame; only act on
+                    # the ones that actually changed, since neither the
+                    # backlight nor a relayout is free.
+                    changed = False
+
+                    level = float(cfg.get("b", brightness))
+                    if abs(level - brightness) > 0.01:
+                        brightness = level
                         store.config["brightness"] = brightness
                         store.save_config()
+                        changed = True
                         try:
                             d.set_backlight(brightness)
                         except Exception as e:
                             store.log("backlight failed: %s" % e)
+
+                    wanted = cfg.get("p")
+                    if wanted is not None:
+                        keys = tuple(k for k in wanted.split(",") if k)
+                        if keys != db.panels:
+                            db.set_panels(keys)
+                            changed = True
+
                     bits = bool(cfg.get("bits", 0))
                     if bits != dashboard.NET_BITS:
                         dashboard.set_net_units(bits)
                         db.invalidate()
-                        applied = True
-                    else:
-                        applied = False
-                    if applied or want != last_cfg_b:
-                        last_cfg_b = want
+                        changed = True
+
+                    if changed:
                         # Tell the host what stuck; the agent logs it.
-                        print("%sbits=%d b=%.2f" % (CFG_TAG, bits, want))
+                        print("%sbits=%d b=%.2f p=%s" % (
+                            CFG_TAG, bits, brightness,
+                            ",".join(db.panels) or "none"))
                 db.push(data)
                 last_rx = time.time()
 

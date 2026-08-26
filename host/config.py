@@ -29,7 +29,10 @@ DEFAULTS = {
     "brightness": 0.85,     # panel backlight, 0.1 - 1.0
     "net_bits": False,      # show network rates in bits rather than bytes
     "detail_period": 1.0,   # seconds between process listings while open
+    "panels": ["cpu", "gpu", "mem", "disk", "net"],   # which panels show
 }
+
+PANELS = ("cpu", "gpu", "mem", "disk", "net")
 
 # Bounds applied on load, so a hand-edited file cannot wedge the agent.
 LIMITS = {
@@ -54,6 +57,18 @@ def coerce(raw):
         if key not in raw:
             continue
         val = raw[key]
+        if key == "panels":
+            # The order here is the running order on the display, so it is
+            # preserved rather than normalised. Unknown names are dropped:
+            # a hand-edited file should not be able to ask for a panel the
+            # board has no code for.
+            if isinstance(val, (list, tuple)):
+                seen = []
+                for k in val:
+                    if k in PANELS and k not in seen:
+                        seen.append(k)
+                cfg[key] = seen
+            continue
         try:
             if isinstance(default, bool):
                 val = bool(val)
