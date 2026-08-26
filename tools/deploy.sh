@@ -17,8 +17,8 @@ fi
 # The dashboard only. The desk pet is a separate bundle — see
 # tools/install_buddy.sh — so that this deploy is the same whether or not
 # anyone wants a pet on their desk.
-FILES=(font_data.py font.py theme.py widgets.py dashboard.py link.py storage.py \
-       main.py)
+FILES=(font_data.py font.py theme.py widgets.py dashboard.py pages.py \
+       link.py storage.py main.py)
 
 echo "deploying to $PORT"
 for f in "${FILES[@]}"; do

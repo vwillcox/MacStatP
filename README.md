@@ -81,6 +81,7 @@ USB, so nothing else needs to be installed to make it work.
 
 | Gesture | What it does |
 |---|---|
+| **Swipe left or right** | Moves between pages, if you have more than one |
 | **Tap a panel** | Opens a full-screen breakdown of it |
 | **Tap again** | Back to the dashboard |
 | **Hold anywhere** | Cycles the backlight brightness |
@@ -94,7 +95,8 @@ immediately — nothing needs restarting.
 | Tab | What's there |
 |---|---|
 | **Status** | Whether the board is connected, frames sent, sample time |
-| **Panels** | Which panels appear, and in what order |
+| **Pages** | Which screens to cycle through, and what's on each |
+| **Panels** | Which panels appear on the dials page, and in what order |
 | **Connection** | Serial port, and how many updates a second to send |
 | **Display** | Brightness, orientation, bytes vs bits, detail refresh |
 | **Measure** | Which disk volume and which network interfaces to watch |
@@ -110,6 +112,25 @@ option disabled.
 
 Changing it restarts the board, since the panel's orientation is fixed
 when it is created.
+
+### Pages
+
+The board can hold several screens and you swipe left or right between
+them; a row of dots shows where you are. Add and order them on the
+**Pages** tab:
+
+| Page | |
+|---|---|
+| **Dials** | The gauges — the default, configured on the Panels tab |
+| **At a glance** | A row per metric: name, recent shape, current value |
+| **Cores, as bars** | One bar per logical core, with percentages |
+| **Cores, as a heatmap** | Each core's recent history as a band of colour |
+| **Network graph** | Down and up over time, on a shared scale |
+
+The glance page lets you pick which metrics to list, up to eight.
+
+CPU temperature isn't offered: reading it needs `powermetrics` as root,
+and nothing here asks for a password.
 
 ### Choosing panels
 

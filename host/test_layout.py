@@ -42,25 +42,16 @@ def geometry_fits(key, x, y, w, h):
         if edge > bottom:
             bad.append("%s ends at %d, card ends at %d" % (name, edge, bottom))
 
-    if key in ("cpu", "gpu"):
-        if g["ay"]:
-            below("first meter", g["ay"] + 29)
-        if g["by"]:
-            below("second meter", g["by"] + 29)
-        if g["ph"]:
-            below("plot", g["py"] + g["ph"])
-        if g["cx"] + g["cw"] > right:
-            bad.append("value column runs past the right edge")
-    elif key == "mem":
-        below("rows", g["ry"] + g["rows"] * g["step"])
-        if g["rows"] < 1:
-            bad.append("no rows at all")
-    elif key == "disk":
-        below("figure", g["vy"] + g["big"])
-        if g["bar"]:
-            below("bar", g["bar_y"] + g["bar_h"])
-        if g["rates"]:
-            below("throughput", g["ry"] + (g["rate"] + 4) + g["rs"])
+    if key in ("cpu", "gpu", "mem", "disk"):
+        # A dial and nothing else, so it just has to fit inside the card
+        # below the title. A radius of zero means the card is too short
+        # to show one at all, which is a valid answer.
+        if g["r"]:
+            if g["cy"] - g["r"] < y + D.TITLE_H - 2:
+                bad.append("dial reaches above the title")
+            below("dial", g["cy"] + g["r"])
+            if g["cx"] - g["r"] < x or g["cx"] + g["r"] > right:
+                bad.append("dial runs past the sides")
     elif key == "net":
         below("second row", g["top"] + 2 * g["row_h"])
         below("sparkline", g["top"] + g["row_h"] + g["sh"])
@@ -91,6 +82,13 @@ def test_every_arrangement():
             for key, (x, y, w, h) in rects.items():
                 problems += ["%s in %s: %s" % (key, combo, b)
                              for b in geometry_fits(key, x, y, w, h)]
+                # Anything the settings can actually produce must be
+                # readable, not merely inside its box.
+                if key != "net":
+                    g = D.Dashboard._GEOM[key](x, y, w, h)
+                    if g["r"] < 20:
+                        problems.append("%s in %s: dial only r=%d"
+                                        % (key, combo, g["r"]))
     check("%d arrangements, none overflowing" % count, not problems,
           problems[:3])
 

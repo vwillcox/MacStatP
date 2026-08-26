@@ -153,6 +153,21 @@ border-radius:5px;padding:3px 9px;font:inherit;font-size:12px;font-weight:400}
 .pill .mv:hover:not(:disabled){color:var(--cyan);border-color:var(--cyan)}
 .pill .mv:disabled{opacity:.3}
 .note{color:var(--mut);font-size:12px;margin:10px 2px 0}
+.page{background:#0b0f16;border:1px solid var(--line);border-radius:8px;
+padding:11px 13px;margin-bottom:8px}
+.page .top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.page .num{color:var(--mut);font-size:12px;min-width:18px}
+.page select{flex:1 1 190px;min-width:160px}
+.metrics{display:grid;gap:6px;margin-top:10px;padding-top:10px;
+border-top:1px solid rgba(255,255,255,.06);
+grid-template-columns:repeat(auto-fit,minmax(128px,1fr))}
+.metrics label{display:flex;gap:8px;align-items:center;font-size:13px;
+color:var(--mut);cursor:pointer;user-select:none}
+.metrics input{margin:0}
+.metrics label.on{color:var(--txt)}
+.x{background:transparent;border:1px solid var(--line);color:var(--mut);
+border-radius:5px;padding:3px 9px;font:inherit;font-size:12px}
+.x:hover:not(:disabled){color:var(--red);border-color:var(--red)}
 .big{font-size:15px;padding:13px 26px}
 .log{background:#080b11;border:1px solid var(--line);border-radius:8px;
 padding:12px;margin-top:14px;max-height:260px;overflow:auto;
@@ -190,7 +205,16 @@ display agent lets go of the port while it runs and picks it back up
 afterwards, so there is nothing to stop or start by hand. It takes a few
 seconds.</p></div>
 
-<div class="card" data-tab="panels"><h2>PANELS ON THE DISPLAY</h2>
+<div class="card" data-tab="pages"><h2>PAGES</h2>
+<div id="pagelist"></div>
+<div class="bar" style="position:static;padding:4px 0 0">
+<button type="button" class="ghost" id="addpage">Add a page</button></div>
+<p class="note">Each page fills the screen. With more than one, swipe left
+or right on the board to move between them and a row of dots shows where
+you are. The <b>Dials</b> page is the one the Panels tab configures.</p>
+</div>
+
+<div class="card" data-tab="panels"><h2>PANELS ON THE DIALS PAGE</h2>
 <div class="plist" id="panels"></div>
 <p class="note">Drag a row, or use the arrows, to change the running
 order &mdash; that is the order they appear on the display. Whatever is
@@ -264,7 +288,8 @@ effect next start</span></label>
 const $=i=>document.getElementById(i);
 let choices={};
 
-const TABS=[["status","Status"],["device","Presto"],["panels","Panels"],
+const TABS=[["status","Status"],["device","Presto"],["pages","Pages"],
+            ["panels","Panels"],
             ["connection","Connection"],["display","Display"],
             ["measure","Measure"],["app","App"]];
 const PANELS=[["cpu","CPU"],["gpu","GPU"],["mem","Memory"],
@@ -365,6 +390,79 @@ function placeBefore(src,target){
   renderPanels(enabled);
 }
 function buildPanels(){}
+
+// ── the Pages tab ───────────────────────────────────────────────────
+const PAGE_TYPES=[["dials","Dials"],["glance","At a glance"],
+                  ["cores_bars","Cores, as bars"],
+                  ["cores_heat","Cores, as a heatmap"],
+                  ["net_graph","Network graph"]];
+const GLANCE=[["cpu","CPU load"],["cpu_peak","Busiest core"],
+              ["load","Load average"],["gpu","GPU load"],
+              ["vram","GPU memory"],["mem","Memory used"],
+              ["swap","Swap"],["disk","Disk used"],
+              ["disk_read","Disk read"],["disk_write","Disk write"],
+              ["net_down","Network down"],["net_up","Network up"]];
+let pageList=[{t:"dials"}];
+
+function renderPages(){
+  const host=$("pagelist");
+  host.innerHTML="";
+  pageList.forEach((page,i)=>{
+    const row=document.createElement("div");
+    row.className="page";
+    const opts=PAGE_TYPES.map(([v,t])=>
+      '<option value="'+v+'"'+(v===page.t?' selected':'')+'>'+t+'</option>')
+      .join("");
+    row.innerHTML=
+      '<div class="top"><span class="num">'+(i+1)+'</span>'+
+      '<select>'+opts+'</select>'+
+      '<button type="button" class="mv up" '+(i===0?'disabled':'')+
+        '>&#9650;</button>'+
+      '<button type="button" class="mv dn" '+
+        (i===pageList.length-1?'disabled':'')+'>&#9660;</button>'+
+      '<button type="button" class="x" '+
+        (pageList.length<2?'disabled':'')+'>Remove</button></div>';
+    if(page.t==="glance"){
+      const grid=document.createElement("div");
+      grid.className="metrics";
+      const chosen=page.m||["cpu","gpu","mem","disk","net_down","net_up"];
+      for(const [key,label] of GLANCE){
+        const on=chosen.includes(key);
+        const l=document.createElement("label");
+        if(on) l.className="on";
+        l.innerHTML='<input type="checkbox" '+(on?'checked':'')+
+          ' data-m="'+key+'"><span>'+label+'</span>';
+        l.querySelector("input").addEventListener("change",e=>{
+          touched();
+          l.classList.toggle("on",e.target.checked);
+          page.m=[...grid.querySelectorAll("input")]
+            .filter(c=>c.checked).map(c=>c.dataset.m);
+        });
+        grid.appendChild(l);
+      }
+      row.appendChild(grid);
+    }
+    row.querySelector("select").addEventListener("change",e=>{
+      touched();
+      page.t=e.target.value;
+      if(page.t==="glance"&&!page.m)
+        page.m=["cpu","gpu","mem","disk","net_down","net_up"];
+      renderPages();
+    });
+    row.querySelector(".up").addEventListener("click",()=>{
+      touched();pageList.splice(i-1,0,pageList.splice(i,1)[0]);renderPages();});
+    row.querySelector(".dn").addEventListener("click",()=>{
+      touched();pageList.splice(i+1,0,pageList.splice(i,1)[0]);renderPages();});
+    row.querySelector(".x").addEventListener("click",()=>{
+      touched();pageList.splice(i,1);renderPages();});
+    host.appendChild(row);
+  });
+}
+$("addpage").addEventListener("click",()=>{
+  touched();
+  pageList.push({t:"glance",m:["cpu","gpu","mem","disk","net_down","net_up"]});
+  renderPages();
+});
 
 // ── the Presto tab ──────────────────────────────────────────────────
 let installing=false;
@@ -476,6 +574,8 @@ function fill(c,login){
   $('login').checked=login;
   $('buddy').checked=c.buddy;
   $('rotate').value=String(c.rotate);
+  pageList=JSON.parse(JSON.stringify(c.pages||[{t:"dials"}]));
+  renderPages();
   const on=c.panels||[];
   // Enabled first, in the stored order, then the rest: the list shows
   // the running order, and what is off sits below it.
@@ -499,7 +599,7 @@ $('f').addEventListener('submit',async e=>{
     net_bits:$('net_bits').checked,detail_period:+$('detail_period').value,
     login:$('login').checked,buddy:$('buddy').checked,
     rotate:+$('rotate').value,
-    panels:currentEnabled()};
+    panels:currentEnabled(),pages:pageList};
   const m=$('msg');
   try{
     const r=await fetch('/api/config',{method:'POST',

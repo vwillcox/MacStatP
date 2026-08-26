@@ -24,6 +24,10 @@ FULL_W = SCREEN - M * 2
 
 HISTORY = 64  # samples kept for the sparklines
 
+# Room kept clear at the bottom for the page indicator, when there is
+# more than one page. Set by main.py.
+BOTTOM_INSET = 0
+
 # Panels can be switched off individually, so nothing here assumes a
 # fixed grid: whatever is enabled is packed into rows that fill the
 # screen, and each panel lays its contents out from the box it is given.
@@ -31,8 +35,9 @@ PANEL_ORDER = ("cpu", "gpu", "mem", "disk", "net")
 ALWAYS_FULL_WIDTH = ("net",)   # two interface rows; too cramped in half
 
 # Relative row heights when several rows share the screen. A row takes the
-# largest weight among its panels.
-ROW_WEIGHT = {"cpu": 1.0, "gpu": 1.0, "mem": 0.80, "disk": 0.80, "net": 0.70}
+# largest weight among its panels. The four dials want the same room as
+# each other; the network needs less, since it is two lines of text.
+ROW_WEIGHT = {"cpu": 1.0, "gpu": 1.0, "mem": 1.0, "disk": 1.0, "net": 0.72}
 
 TITLES = {
     "cpu": "CPU",
@@ -44,7 +49,6 @@ TITLES = {
 
 TITLE_H = 44    # card title and its hairline
 PAD = 12        # inside a card
-MEM_ROWS = ("USED", "TOTAL", "WIRED", "COMP", "SWAP")
 
 
 def pack(enabled):
@@ -80,7 +84,8 @@ def pack(enabled):
     if not rows:
         return {}
 
-    avail = SCREEN - M * 2 - GAP * (len(rows) - 1)
+    bottom = SCREEN - M - BOTTOM_INSET
+    avail = bottom - M - GAP * (len(rows) - 1)
     weights = [max(ROW_WEIGHT.get(k, 1.0) for k in row) for row in rows]
     total = sum(weights) or 1.0
 
@@ -88,7 +93,7 @@ def pack(enabled):
     y = M
     for i, row in enumerate(rows):
         if i == len(rows) - 1:
-            h = SCREEN - M - y          # absorb the rounding
+            h = bottom - y              # absorb the rounding
         else:
             h = int(avail * weights[i] / total)
         n = len(row)
@@ -238,122 +243,21 @@ class Dashboard:
 
     @staticmethod
     def _gauge_geom(x, y, w, h):
-        """Gauge on the left, two meters and a plot on the right."""
-        top = y + TITLE_H
-        avail = y + h - PAD - top
-        r = max(26, int(min(avail * 0.40, w * 0.21, 96)))
-        gcx = x + PAD + r
-        cx = gcx + r + 12
-        cw = max(40, x + w - PAD - cx)
+        """A single dial, centred in whatever box the panel is given.
 
-        # Place top-down against the real bottom edge. Sizing anything by
-        # a fixed minimum overflowed the card when the row was short, and
-        # the overflow landed on the panel below.
-        bottom = y + h - PAD
-        mh = 29                                   # label plus its bar
-        want_plot = min(int(avail * 0.30), 160)
-        extra = max(0, avail - (mh * 2 + 16 + want_plot))
-        gapv = max(4, extra // 3)
-        ay = top
-        by = ay + mh + gapv
-        ly = by + mh + gapv
-        py = ly + 16
-        ph = bottom - py
-        if ph < 16:                 # no room for a plot; drop it
-            ph = 0
-            ly = 0
-            py = 0
-        elif ph > want_plot:
-            # Spare room goes into the gaps, then the block is centred.
-            ph = want_plot
-            slack = bottom - (py + ph)
-            ay += slack // 2
-            by += slack // 2
-            ly += slack // 2
-            py += slack // 2
-        if by + mh > bottom:        # not even two meters fit
-            by = 0
-        if ay + mh > bottom:        # nor even one
-            ay = 0
-        # meter_value erases before redrawing; keep that box clear of the
-        # label to its left.
-        mvw = max(30, int(cw - max(font.width(l, 12)
-                                   for l in ("LOAD", "VRAM", "PEAK")) - 10))
-        return {"gcx": gcx, "gcy": top + avail // 2, "r": r,
-                "cx": cx, "cw": cw, "ay": ay, "by": by,
-                "ly": ly, "py": py, "ph": ph, "mvw": mvw}
-
-    @staticmethod
-    def _fit_pair(labels, sample, cw, hi, lo=9):
-        """Largest text size where a label and its value both fit in cw.
-
-        Row height alone is the wrong measure: a tall narrow card wants
-        big text vertically and has nowhere to put it horizontally, and
-        the value ends up sitting on top of the label.
+        The main screen is meant to be read at a glance from across a
+        desk, so each panel carries its headline figure and nothing else;
+        the breakdown is a tap away. It also means a panel has nothing
+        that can fail to fit — a dial simply scales.
         """
-        for size in range(int(hi), lo - 1, -1):
-            widest = max(font.width(l, size) for l in labels)
-            if widest + font.width(sample, size) + 10 <= cw:
-                return size
-        return lo
-
-    @staticmethod
-    def _mem_geom(x, y, w, h):
-        top = y + TITLE_H
-        avail = y + h - PAD - top
-        r = max(24, int(min(avail * 0.46, w * 0.21, 88)))
-        gcx = x + PAD + r
-        cx = gcx + r + 12
-        cw = max(40, x + w - PAD - cx)
-        step = max(13, min(26, int(avail / (len(MEM_ROWS) + 0.6))))
-        # Show only what fits. Five rows at the minimum step need 65px,
-        # and a short card has less; the rest used to spill over the edge.
-        rows = max(1, min(len(MEM_ROWS), avail // step))
-        ry = top + max(0, (avail - step * rows) // 2)
-        size = Dashboard._fit_pair(MEM_ROWS, "16.0G", cw,
-                                   max(10, min(14, step - 5)))
-        # The values are erased before being redrawn, so that box has to
-        # start clear of the widest label or it rubs them out.
-        lw = max(font.width(l, size) for l in MEM_ROWS)
-        return {"gcx": gcx, "gcy": top + avail // 2, "r": r, "cx": cx,
-                "cw": cw, "ry": ry, "step": step, "size": size,
-                "rows": rows, "vw": max(30, int(cw - lw - 8))}
-
-    @staticmethod
-    def _disk_geom(x, y, w, h):
         top = y + TITLE_H
         bottom = y + h - PAD
-        avail = max(0, bottom - top)
-        cx = x + PAD + 2
-        cw = x + w - PAD - cx
-
-        # Placed top-down against the real bottom edge, dropping whatever
-        # will not fit rather than running past it: the figure matters
-        # most, then the bar, then the throughput.
-        big = min(46, max(14, int(avail * 0.26)))
-        if big > avail:
-            big = max(8, avail)
-        bar_h = max(6, min(int(avail * 0.09), 16))
-        rate = max(11, min(int(avail * 0.11), 16))
-        rs = Dashboard._fit_pair(("READ", "WRITE"), "426 KB/S", cw,
-                                 min(12, rate))
-        lw = max(font.width(l, rs) for l in ("READ", "WRITE"))
-
-        bar_y = top + big + 16
-        show_bar = bar_y + bar_h <= bottom
-        ry = bar_y + bar_h + 14
-        rates_extent = (rate + 4) + rs
-        show_rates = show_bar and ry + rates_extent <= bottom
-
-        used = big + 16 + (bar_h if show_bar else -16) \
-            + (14 + rates_extent if show_rates else 0)
-        vy = top + max(0, (avail - used) // 2)
-        bar_y = vy + big + 16
-        ry = bar_y + bar_h + 14
-        return {"cx": cx, "cw": cw, "big": big, "vy": vy, "bar_y": bar_y,
-                "bar_h": bar_h, "rate": rate, "ry": ry, "rs": rs,
-                "rvw": max(40, int(cw - lw - 8)),
-                "bar": show_bar, "rates": show_rates}
+        # No floor on the radius: forcing a minimum is what used to push
+        # content past the edge of a short card. Below the point where a
+        # dial could be read at all, draw nothing and leave the title.
+        r = int(min((bottom - top) * 0.48, w * 0.40, 112))
+        return {"cx": x + w // 2, "cy": (top + bottom) // 2,
+                "r": r if r >= 12 else 0}
 
     @staticmethod
     def _net_geom(x, y, w, h, rows=2):
@@ -433,161 +337,25 @@ class Dashboard:
             W.card(d, p, x, y, w, h, TITLES[key],
                    accent=theme.ACCENT.get(key, theme.CYAN))
 
-        # The static labels are placed by the same geometry, so clip them
-        # to their cards too.
-
-        for key, a, b, plot in (("cpu", "LOAD", "PEAK", "CORES"),
-                                ("gpu", "VRAM", "PEAK", "HISTORY")):
-            if key not in self._rects:
-                continue
-            g = self._geom[key]
-            if g["ay"]:
-                W.meter_label(d, p, g["cx"], g["ay"], a)
-            if g["by"]:
-                W.meter_label(d, p, g["cx"], g["by"], b)
-            if g["ph"]:
-                p.set(theme.MUTED)
-                font.text(d, plot, g["cx"], g["ly"], 12)
-
-        if "mem" in self._rects:
-            g = self._geom["mem"]
-            for i, label in enumerate(MEM_ROWS[:g["rows"]]):
-                p.set(theme.MUTED)
-                font.text(d, label, g["cx"], g["ry"] + i * g["step"],
-                          g["size"])
-
-        if "disk" in self._rects:
-            g = self._geom["disk"]
-            if g["rates"]:
-                for i, label in enumerate(("READ", "WRITE")):
-                    p.set(theme.MUTED)
-                    font.text(d, label, g["cx"],
-                              g["ry"] + i * (g["rate"] + 4), g["rs"])
-
     # ── panels ────────────────────────────────────────────────────────
-    def _cpu(self, data, x, y, w, h):
-        d, p = self.d, self.p
-        g = self._geom["cpu"]
-        cpu = data.get("cpu", {})
-        cores = cpu.get("cores", []) or []
-        ncpu = max(1, int(cpu.get("n", 1)))
-        load = (data.get("load") or [0, 0, 0])[0]
-        peak = max(cores) if cores else 0.0
-
-        self._lit["cpu"] = W.gauge(d, p, g["gcx"], g["gcy"], g["r"],
-                                   float(cpu.get("pct", 0)), "CPU %",
-                                   self._lit.get("cpu"))
-
-        if g["ay"]:
-            W.meter_value(d, p, g["cx"], g["ay"], g["cw"], "%.2f" % load,
-                          min(1.0, load / ncpu), theme.ACCENT["cpu"],
-                          clear_w=g["mvw"])
-        if g["by"]:
-            W.meter_value(d, p, g["cx"], g["by"], g["cw"], "%d%%" % int(peak),
-                          peak / 100.0, theme.heat(peak / 100.0),
-                          clear_w=g["mvw"])
-
-        if not g["ph"] or not cores:
+    def _dial(self, key, pct, caption):
+        g = self._geom[key]
+        if not g["r"]:
             return
-        # Per-core ticks: one slim column per logical core. Each cell
-        # repaints its own track, so no separate erase is needed.
-        by, bh = g["py"], g["ph"]
-        cell = g["cw"] / float(len(cores))
-        for i, c in enumerate(cores):
-            ch = max(2, int(bh * min(1.0, c / 100.0)))
-            bx = int(g["cx"] + i * cell)
-            bw = max(1, int(cell) - 1)
-            p.set(theme.TRACK)
-            d.rectangle(bx, by, bw, bh)
-            p.set(theme.heat(c / 100.0))
-            d.rectangle(bx, by + bh - ch, bw, ch)
+        self._lit[key] = W.gauge(self.d, self.p, g["cx"], g["cy"], g["r"],
+                                 pct, caption, self._lit.get(key))
+
+    def _cpu(self, data, x, y, w, h):
+        self._dial("cpu", float(data.get("cpu", {}).get("pct", 0)), "CPU %")
 
     def _gpu(self, data, x, y, w, h):
-        d, p = self.d, self.p
-        g = self._geom["gpu"]
-        gpu = data.get("gpu", {})
-        pct = float(gpu.get("pct", 0))
-        vram = int(gpu.get("vram", 0))
-        total = int(data.get("mem", {}).get("total", 0)) or 1
-        peak = max(self.gpu_hist) if self.gpu_hist else pct
-
-        self._lit["gpu"] = W.gauge(d, p, g["gcx"], g["gcy"], g["r"], pct,
-                                   "GPU %", self._lit.get("gpu"))
-
-        if g["ay"]:
-            W.meter_value(d, p, g["cx"], g["ay"], g["cw"], fmt_bytes(vram),
-                          min(1.0, vram / float(total)),
-                          theme.ACCENT["gpu"], clear_w=g["mvw"])
-        if g["by"]:
-            W.meter_value(d, p, g["cx"], g["by"], g["cw"], "%d%%" % int(peak),
-                          peak / 100.0, theme.heat(peak / 100.0),
-                          clear_w=g["mvw"])
-
-        if not g["ph"]:
-            return
-        self._clr(g["cx"], g["py"], g["cw"], g["ph"])
-        W.sparkline(d, p, g["cx"], g["py"], g["cw"], g["ph"], self.gpu_hist,
-                    theme.ACCENT["gpu"], peak=100.0, capacity=HISTORY)
+        self._dial("gpu", float(data.get("gpu", {}).get("pct", 0)), "GPU %")
 
     def _mem(self, data, x, y, w, h):
-        d, p = self.d, self.p
-        g = self._geom["mem"]
-        mem = data.get("mem", {})
-
-        self._lit["mem"] = W.gauge(d, p, g["gcx"], g["gcy"], g["r"],
-                                   float(mem.get("pct", 0)), "RAM %",
-                                   self._lit.get("mem"))
-
-        vals = (mem.get("used"), mem.get("total"), mem.get("wired"),
-                mem.get("comp"), mem.get("swap"))[:g["rows"]]
-        vw = g["vw"]
-        self._clr(g["cx"] + g["cw"] - vw, g["ry"] - 2, vw,
-                  g["rows"] * g["step"])
-        p.set(theme.TEXT)
-        for i, v in enumerate(vals):
-            font.text(d, fmt_bytes(v), g["cx"] + g["cw"],
-                      g["ry"] + i * g["step"], g["size"], align=font.RIGHT)
+        self._dial("mem", float(data.get("mem", {}).get("pct", 0)), "RAM %")
 
     def _disk(self, data, x, y, w, h):
-        d, p = self.d, self.p
-        g = self._geom["disk"]
-        dk = data.get("disk", {})
-        pct = float(dk.get("pct", 0))
-        cx, cw, big = g["cx"], g["cw"], g["big"]
-
-        val = "%d" % int(round(pct))
-        self._clr(cx, g["vy"], int(cw * 0.55), big + 6)
-        p.set(theme.WHITE)
-        font.text(d, val, cx, g["vy"], big)
-        p.set(theme.MUTED)
-        font.text(d, "%", cx + font.width(val, big) + 5,
-                  g["vy"] + big * 0.42, max(12, int(big * 0.5)))
-
-        sz = max(11, min(15, int(big * 0.42)))
-        self._clr(cx + cw - int(cw * 0.44), g["vy"], int(cw * 0.44),
-                  big + 6)
-        p.set(theme.TEXT)
-        font.text(d, fmt_bytes(dk.get("used")), cx + cw, g["vy"], sz,
-                  align=font.RIGHT)
-        p.set(theme.MUTED)
-        font.text(d, "OF " + fmt_bytes(dk.get("total")), cx + cw,
-                  g["vy"] + sz + 6, sz - 2, align=font.RIGHT)
-
-        if g["bar"]:
-            W.bar(d, p, cx, g["bar_y"], cw, g["bar_h"], pct / 100.0,
-                  theme.heat(pct / 100.0))
-
-        if not g["rates"]:
-            return
-        rv, ru = fmt_rate(dk.get("r"))
-        wv, wu = fmt_rate(dk.get("w"))
-        rs = g["rs"]
-        for i, (txt, colour) in enumerate((("%s %s" % (rv, ru), theme.CYAN),
-                                           ("%s %s" % (wv, wu), theme.AMBER))):
-            yy = g["ry"] + i * (g["rate"] + 4)
-            self._clr(cx + cw - g["rvw"], yy - 2, g["rvw"], rs + 4)
-            p.set(colour)
-            font.text(d, txt, cx + cw, yy, rs, align=font.RIGHT)
+        self._dial("disk", float(data.get("disk", {}).get("pct", 0)), "DISK %")
 
     def _net(self, data, x, y, w, h):
         """One row per live interface.
@@ -764,18 +532,26 @@ class Dashboard:
         cpu = data.get("cpu", {})
         mem = data.get("mem", {})
         if view == "cpu":
-            return "%d%% OF %d CORES   LOAD %.2f" % (
+            cores = cpu.get("cores") or [0]
+            return "%d%% OF %d CORES  LOAD %.2f  PEAK %d%%" % (
                 int(cpu.get("pct", 0)), cpu.get("n", 0),
-                (data.get("load") or [0])[0])
+                (data.get("load") or [0])[0], int(max(cores)))
         if view == "mem":
-            return "%s USED OF %s   %d%%" % (
+            return "%s OF %s  WIRED %s  COMP %s" % (
                 fmt_bytes(mem.get("used")), fmt_bytes(mem.get("total")),
-                int(mem.get("pct", 0)))
+                fmt_bytes(mem.get("wired")), fmt_bytes(mem.get("comp")))
         if view == "net":
             return "TOP TALKERS BY THROUGHPUT"
         if view == "disk":
-            return "MOUNTED VOLUMES"
-        return "GPU ENGINES"
+            dk = data.get("disk", {})
+            rv, ru = fmt_rate(dk.get("r"))
+            wv, wu = fmt_rate(dk.get("w"))
+            return "%s OF %s  READ %s%s  WRITE %s%s" % (
+                fmt_bytes(dk.get("used")), fmt_bytes(dk.get("total")),
+                rv, ru, wv, wu)
+        gpu = data.get("gpu", {})
+        return "%d%%  VRAM %s" % (int(gpu.get("pct", 0)),
+                                  fmt_bytes(gpu.get("vram")))
 
     def _gpu_detail(self, x, w, det, data):
         d, p = self.d, self.p
@@ -822,8 +598,8 @@ class Dashboard:
 Dashboard._GEOM = {
     "cpu": Dashboard._gauge_geom,
     "gpu": Dashboard._gauge_geom,
-    "mem": Dashboard._mem_geom,
-    "disk": Dashboard._disk_geom,
+    "mem": Dashboard._gauge_geom,
+    "disk": Dashboard._gauge_geom,
     "net": Dashboard._net_geom,
 }
 

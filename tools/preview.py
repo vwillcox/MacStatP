@@ -31,6 +31,20 @@ import builtins
 builtins.micropython = _MicroPythonShim
 
 
+def _whole(*values):
+    """PicoGraphics rejects float coordinates; the shim used not to.
+
+    That difference hid a whole class of bug: previews rendered
+    perfectly and the board raised TypeError on the same code. The shim
+    is strict now, so a preview fails where the hardware would.
+    """
+    for v in values:
+        if isinstance(v, float) and v != int(v):
+            raise TypeError(
+                "PicoGraphics needs whole pixels, got %r — round it before "
+                "drawing" % (v,))
+
+
 class ShimDisplay:
     """PicoGraphics-compatible façade over the software rasteriser."""
 
@@ -58,12 +72,14 @@ class ShimDisplay:
         self.cv.remove_clip()
 
     def rectangle(self, x, y, w, h):
+        _whole(x, y, w, h)
         self.cv.rect(int(x), int(y), int(w), int(h), self._pen)
 
     def polygon(self, pts):
         self.cv.polygon([(float(a), float(b)) for a, b in pts], self._pen)
 
     def circle(self, x, y, r):
+        _whole(x, y, r)
         self.cv.circle(int(x), int(y), int(r), self._pen)
 
     def line(self, x0, y0, x1, y1, t=1):

@@ -23,7 +23,8 @@ CHUNK = 4096            # bytes per write; raw-paste handles the flow
 READ_TIMEOUT = 0.05     # a long serial timeout dominated the transfer
 
 CORE_FILES = ("font_data.py", "font.py", "theme.py", "widgets.py",
-              "dashboard.py", "link.py", "storage.py", "main.py")
+              "dashboard.py", "pages.py", "link.py", "storage.py",
+              "main.py")
 
 
 class PushError(Exception):

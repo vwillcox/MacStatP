@@ -139,6 +139,24 @@ tests, and `host/test_layout.py` sweeps every box size the packer can
 produce, asserting nothing lands past an edge and that a real render
 leaves the gaps between cards untouched.
 
+## Pages
+
+`device/pages.py` holds the full-screen views: a list of sparklines, the
+cores as bars or as a heatmap, and a network graph. Each owns the whole
+screen, draws its own header and works from `History`, which accumulates
+what arrives — the host sends a snapshot per frame, not a series.
+
+The page list rides with every frame in the same compact form the panels
+use: `dials|glance:cpu,gpu|cores_bars`. A pipe between pages, an optional
+colon-separated argument list.
+
+One thing to know if you add a page type: **`font.width()` returns a
+float**, and PicoGraphics rejects float coordinates. Anything derived
+from a text measurement has to be made whole before it is drawn. This
+went unnoticed because the preview shim happily accepted floats while the
+board raised `TypeError` on exactly the same code — so the shim now
+refuses them too, and a preview fails where the hardware would.
+
 ## The font
 
 The panel uses a purpose-built display face, "Presto Techno" — bold and
@@ -180,9 +198,12 @@ python3 tools/capture.py --live -o shot.png   # drive the running board, then sc
 ```
 
 `device/dashboard.py` runs unmodified on both the board and the Mac, so
-the preview is the same code that ships. `tools/capture.py` deletes the
-previous screenshot before asking for a new one — reading a stale file
-back looks exactly like a successful capture, and once did.
+the preview is the same code that ships. `tools/capture.py` deletes the previous screenshot before asking for a
+new one, and resets the board first. Both matter: pulling a screenshot
+uses mpremote, which leaves the board at the REPL with `main.py` stopped,
+so the next capture feeds frames to a prompt that echoes them and returns
+the previous screenshot. That looks exactly like a setting failing to
+apply, and wasted a great deal of time before it was spotted.
 
 ## Tests
 
@@ -216,7 +237,8 @@ host/     agent.py         samples the Mac, sends one JSON line per frame
           pushcode.py      raw REPL file transfer, no mpremote needed
           test_pushcode.py tests for the transfer
 device/   main.py          render loop on the board, and the mode switch
-          dashboard.py     panel layout and the packing engine
+          dashboard.py     the dials page, and the packing engine
+          pages.py         the other page types, and their history
           widgets.py       cards, radial gauges, meters, sparklines
           font.py          renderer for the custom display face
           font_data.py     generated glyph table (do not edit)

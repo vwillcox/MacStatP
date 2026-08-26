@@ -39,6 +39,7 @@ except ImportError:         # older builds simply cannot rotate
     ROTATE_180 = None
 
 import dashboard
+import pages
 import storage
 import theme
 from link import Link
@@ -52,6 +53,7 @@ CFG_TAG = "#C:"      # settings the board has actually applied
 
 DASH, BUDDY = 0, 1   # the two faces
 SHADE_TOP = 60       # a swipe starting this high up is the mode switch
+SWIPE_X = 70         # sideways travel that counts as a page change
 SHADE_PULL = 70      # ...and has to travel this far down to count
 
 
@@ -84,6 +86,26 @@ def cycle_brightness(level):
         if level < step - 0.01:
             return step
     return 0.25
+
+
+def parse_pages(spec):
+    """Decode the compact page list the host sends.
+
+    "dials|glance:cpu,gpu|cores_bars" — a pipe between pages, and an
+    optional colon-separated argument list. Compact because it rides
+    along with every frame.
+    """
+    out = []
+    for part in str(spec).split("|"):
+        part = part.strip()
+        if not part:
+            continue
+        kind, _, args = part.partition(":")
+        page = {"t": kind}
+        if args:
+            page["m"] = [a for a in args.split(",") if a]
+        out.append(page)
+    return out or [{"t": "dials"}]
 
 
 def buddy_installed():
@@ -184,6 +206,12 @@ async def main():
         mode = BUDDY
     pulled_by_buddy = False   # the pet interrupted us; go back when it's done
 
+    # Pages: the dials are one view of the machine, and the settings can
+    # add others. One page means no indicator and no sideways swiping.
+    page_specs = [{"t": "dials"}]
+    page_at = 0
+    hist = pages.History()
+
     data = None
     detail = None
     view = None          # None = dashboard, otherwise the open panel
@@ -210,6 +238,15 @@ async def main():
                 # first meant a quick agent restart left the settings page
                 # with nothing to go on.
                 say_info = True
+            elif cmd == "page":
+                # Lets the capture tool step through the pages without a
+                # human swiping the screen.
+                try:
+                    page_at = int(incoming.get("n", 0)) % max(1, len(page_specs))
+                    view = None
+                    db.invalidate()
+                except Exception:
+                    pass
             elif cmd == "unshot":
                 # Drop the previous capture so a stale file can't be read
                 # back and mistaken for a fresh one.
@@ -273,6 +310,17 @@ async def main():
                         time.sleep(0.4)      # let that reach the host
                         machine.reset()
 
+                    spec = cfg.get("pg")
+                    if spec is not None:
+                        want = parse_pages(spec)
+                        if want != page_specs:
+                            page_specs = want
+                            page_at = min(page_at, len(page_specs) - 1)
+                            dashboard.BOTTOM_INSET = (
+                                pages.DOTS_H if len(page_specs) > 1 else 0)
+                            db.invalidate()
+                            changed = True
+
                     bits = bool(cfg.get("bits", 0))
                     if bits != dashboard.NET_BITS:
                         dashboard.set_net_units(bits)
@@ -285,6 +333,7 @@ async def main():
                             CFG_TAG, bits, brightness,
                             ",".join(db.panels) or "none"))
                 db.push(data)
+                hist.push(data)
                 last_rx = time.time()
 
         linked = data is not None and (time.time() - last_rx) < IDLE_LIMIT
@@ -322,6 +371,15 @@ async def main():
                     # sampled two or three times and the position at
                     # release has usually lost most of the travel — decide
                     # the swipe here, as soon as it's gone far enough.
+                    dx = last_xy[0] - press_xy[0]
+                    if (not swiped and len(page_specs) > 1
+                            and abs(dx) >= SWIPE_X
+                            and abs(dx) > abs(last_xy[1] - press_xy[1])):
+                        swiped = True
+                        page_at = (page_at + (1 if dx < 0 else -1)) \
+                            % len(page_specs)
+                        view = None
+                        db.invalidate()
                     if (not swiped and buddy is not None
                             and press_xy[1] <= SHADE_TOP
                             and last_xy[1] - press_xy[1] >= SHADE_PULL):
@@ -375,7 +433,22 @@ async def main():
         elif view is not None:
             db.detail(view, data, detail)
         else:
-            db.render(data, linked=linked)
+            spec = page_specs[page_at] if page_specs else {"t": "dials"}
+            kind = spec.get("t", "dials")
+            if kind == "dials" or kind not in pages.RENDERERS:
+                db.render(data, linked=linked)
+            else:
+                # The page renderers own the whole screen, so the dials'
+                # incremental drawing has to start fresh when we return.
+                db.invalidate()
+                pens.set(theme.BG)
+                d.clear()
+                pages.RENDERERS[kind](
+                    d, pens, data, hist,
+                    keys=spec.get("m") or pages.GLANCE_DEFAULT,
+                    host=data.get("host", ""))
+            if len(page_specs) > 1:
+                pages.dots(d, pens, len(page_specs), page_at)
         if drew:
             d.update()
 

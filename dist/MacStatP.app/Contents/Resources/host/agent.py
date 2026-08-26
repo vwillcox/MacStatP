@@ -160,7 +160,21 @@ def device_config(cfg):
             "bits": 1 if cfg["net_bits"] else 0,
             "p": ",".join(cfg["panels"]),
             "pet": 1 if cfg["buddy"] else 0,
-            "rot": int(cfg["rotate"])}
+            "rot": int(cfg["rotate"]),
+            "pg": encode_pages(cfg["pages"])}
+
+
+def encode_pages(specs):
+    """Pack the page list small enough to ride with every frame.
+
+    "dials|glance:cpu,gpu|cores_bars"
+    """
+    out = []
+    for page in specs or [{"t": "dials"}]:
+        kind = page.get("t", "dials")
+        metrics = page.get("m") or []
+        out.append("%s:%s" % (kind, ",".join(metrics)) if metrics else kind)
+    return "|".join(out)
 
 
 def main():

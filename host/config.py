@@ -32,7 +32,14 @@ DEFAULTS = {
     "panels": ["cpu", "gpu", "mem", "disk", "net"],   # which panels show
     "buddy": True,          # run the desk pet, when its bundle is installed
     "rotate": 0,            # panel orientation: 0 or 180 (firmware v2.0.0+)
+    # Screens to cycle through, in order. Each is {"t": type} plus, for
+    # the glance page, "m": the metrics to list.
+    "pages": [{"t": "dials"}],
 }
+
+PAGE_TYPES = ("dials", "glance", "cores_bars", "cores_heat", "net_graph")
+GLANCE_METRICS = ("cpu", "cpu_peak", "load", "gpu", "vram", "mem", "swap",
+                  "disk", "disk_read", "disk_write", "net_down", "net_up")
 
 PANELS = ("cpu", "gpu", "mem", "disk", "net")
 
@@ -61,6 +68,25 @@ def coerce(raw):
         if key not in raw:
             continue
         val = raw[key]
+        if key == "pages":
+            if isinstance(val, (list, tuple)):
+                out = []
+                for item in val:
+                    if not isinstance(item, dict):
+                        continue
+                    kind = str(item.get("t", ""))
+                    if kind not in PAGE_TYPES:
+                        continue
+                    page = {"t": kind}
+                    if kind == "glance":
+                        chosen = [m for m in (item.get("m") or [])
+                                  if m in GLANCE_METRICS]
+                        page["m"] = chosen[:8] or list(
+                            GLANCE_METRICS[:1])
+                    out.append(page)
+                # Something has to be on screen.
+                cfg[key] = out or [{"t": "dials"}]
+            continue
         if key == "rotate":
             try:
                 val = int(val)

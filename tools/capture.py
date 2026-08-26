@@ -152,6 +152,16 @@ def capture_live(port, out_path, seconds=8):
     col = macstats.Collector()
     cfg = config.load()
     agent.apply_config(col, cfg)
+
+    # Pulling the last screenshot uses mpremote, which leaves the board
+    # at the REPL with main.py stopped. Without this the next capture
+    # feeds frames to a prompt that just echoes them, and returns the
+    # previous screenshot — which looks exactly like a change that did
+    # not take effect. It cost hours before it was spotted.
+    print("resetting the board so main.py is running...")
+    subprocess.run(["mpremote", "connect", port, "reset"],
+                   capture_output=True, timeout=60)
+    time.sleep(9)
     time.sleep(0.5)
 
     print("feeding %s for %ds..." % (port, seconds))

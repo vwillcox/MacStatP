@@ -157,26 +157,6 @@ def bar(d, pens, x, y, w, h, frac, colour, track=None):
         d.polygon(chamfered(x, y, fw, h, min(h // 2, fw // 2)))
 
 
-def meter_label(d, pens, x, y, label, lsize=12):
-    """Static half of a meter, drawn once with the rest of the chrome."""
-    pens.set(theme.MUTED)
-    font.text(d, label, x, y, lsize)
-
-
-def meter_value(d, pens, x, y, w, value, frac, colour, lsize=12, bar_h=11,
-                clear_w=62):
-    """Dynamic half: the right-aligned reading and the pill below it.
-
-    The bar repaints its own track, so only the number needs erasing.
-    """
-    pens.set(theme.CARD)
-    d.rectangle(int(x + w - clear_w), int(y - 2), int(clear_w), int(lsize + 5))
-    pens.set(theme.TEXT)
-    font.text(d, value, x + w, y, lsize, align=font.RIGHT)
-    bar(d, pens, x, y + lsize + 6, w, bar_h, frac, colour)
-    return y + lsize + 6 + bar_h
-
-
 def sparkline(d, pens, x, y, w, h, values, colour, peak=None, capacity=None):
     """Filled area chart, newest sample at the right edge.
 
@@ -217,3 +197,33 @@ def sparkline(d, pens, x, y, w, h, values, colour, peak=None, capacity=None):
 def dot(d, pens, cx, cy, r, colour):
     pens.set(colour)
     d.circle(int(cx), int(cy), int(r))
+
+
+def trace(d, pens, x, y, w, h, values, colour, peak=None, capacity=None,
+          thickness=2):
+    """A line chart: just the shape, no fill.
+
+    Reads better than a filled area when the value barely moves — a flat
+    line says "steady", a solid block says nothing.
+    """
+    if not values:
+        return
+    hi = peak if peak else max(values)
+    if not hi or hi <= 0:
+        hi = 1.0
+
+    slots = capacity or len(values)
+    vals = values[-slots:]
+    if len(vals) < 2:
+        return
+    step = w / float(slots - 1 if slots > 1 else 1)
+    offset = slots - len(vals)
+
+    pens.set(colour)
+    px = int(x + offset * step)
+    py = int(y + h - h * min(1.0, vals[0] / hi))
+    for i in range(1, len(vals)):
+        nx = int(x + (offset + i) * step)
+        ny = int(y + h - h * min(1.0, vals[i] / hi))
+        d.line(px, py, nx, ny, thickness)
+        px, py = nx, ny

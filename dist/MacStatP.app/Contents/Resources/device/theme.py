@@ -14,6 +14,8 @@ GREEN = (54, 222, 138)
 AMBER = (255, 178, 40)
 RED = (255, 72, 92)
 PURPLE = (154, 100, 255)
+TEAL = (62, 226, 196)      # the pages' accent
+ROW = (24, 30, 42)         # banding behind a list row
 WHITE = (255, 255, 255)
 
 # Per-metric accents, used for bars and sparklines.
@@ -44,6 +46,22 @@ def heat(frac):
     if frac < 0.85:
         return _mix(AMBER, RED, (frac - 0.55) / 0.30)
     return RED
+
+
+# Cool to hot, for the per-core heatmap. Distinct from heat(), which is
+# a judgement about load; this one is a scale to read positions off.
+_RAMP = ((62, 226, 196), (120, 220, 120), (240, 220, 90),
+         (245, 160, 60), (235, 70, 60))
+
+
+def ramp(frac):
+    frac = 0.0 if frac < 0 else (1.0 if frac > 1 else frac)
+    span = len(_RAMP) - 1
+    at = frac * span
+    i = int(at)
+    if i >= span:
+        return _RAMP[span]
+    return _mix(_RAMP[i], _RAMP[i + 1], at - i)
 
 
 def dim(c, f):
