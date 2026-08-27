@@ -19,9 +19,11 @@ import widgets as W
 
 SCREEN = 480
 M = 6           # outer margin
-# Between cards. Not smaller: at 2 the two card borders meet and read as
-# one thick rule, and the panels stop looking separate.
-GAP = 3
+# Between cards: near-flush, so the cards read as one panel divided up
+# rather than as tiles floating apart. The two adjacent borders stay a
+# pixel clear of each other, and the chamfers meet in a small diamond
+# where four corners converge.
+GAP = 1
 FULL_W = SCREEN - M * 2
 
 HISTORY = 64  # samples kept for the sparklines
