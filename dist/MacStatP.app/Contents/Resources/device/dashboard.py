@@ -19,7 +19,9 @@ import widgets as W
 
 SCREEN = 480
 M = 6           # outer margin
-GAP = 6
+# Between cards. Not smaller: at 2 the two card borders meet and read as
+# one thick rule, and the panels stop looking separate.
+GAP = 3
 FULL_W = SCREEN - M * 2
 
 HISTORY = 64  # samples kept for the sparklines
